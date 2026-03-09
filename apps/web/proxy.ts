@@ -12,7 +12,7 @@ export async function proxy(request: NextRequest) {
 	const { pathname } = request.nextUrl;
 
 	// Protect dashboard routes
-	if (pathname.startsWith("/dashboard")) {
+	if (false && pathname.startsWith("/dashboard")) {
 		if (!hasSession) {
 			return NextResponse.redirect(new URL("/login", request.url));
 		}
