@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "skills": {
+    "agent-browser": {
+      "source": "vercel-labs/agent-browser",
+      "sourceType": "github",
+      "computedHash": "1d536cae2d53a425f094d7b4f5f3b15747a62292dd3ff3bdaa42d00c9c297c51"
+    },
+    "agentation": {
+      "source": "benjitaylor/agentation",
+      "sourceType": "github",
+      "computedHash": "6ba2c955bee6ab3e9c7781b2553e3574b4c9ec35e539437d0831bfe368de8550"
+    },
+    "auth-setup": {
+      "source": "get-convex/convex-agent-plugins",
+      "sourceType": "github",
+      "computedHash": "e530b99bb501a04d1562755fb6166f18aa356330d2ff7b7e6195283cfe84ef99"
+    },
+    "better-auth-best-practices": {
+      "source": "better-auth/skills",
+      "sourceType": "github",
+      "computedHash": "a4c830509e85557b59339d8d93a4e243e9e59c686e7678854d39230e12c2a6dc"
+    },
+    "components-guide": {
+      "source": "get-convex/convex-agent-plugins",
+      "sourceType": "github",
+      "computedHash": "45dd1171ea2db23f73d571abf79a3560f57a86472f2078791e11c73db79c494f"
+    },
+    "convex-quickstart": {
+      "source": "get-convex/convex-agent-plugins",
+      "sourceType": "github",
+      "computedHash": "d9cd80ffb9eb156719b75160726449ea7118db67c160aecdf4036d89f86887d1"
+    },
+    "find-skills": {
+      "source": "vercel-labs/skills",
+      "sourceType": "github",
+      "computedHash": "6412eb4eb3b91595ebab937f0c69501240e7ba761b3d82510b5cf506ec5c7adc"
+    },
+    "frontend-design": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "063a0e6448123cd359ad0044cc46b0e490cc7964d45ef4bb9fd842bd2ffbca67"
+    },
+    "function-creator": {
+      "source": "get-convex/convex-agent-plugins",
+      "sourceType": "github",
+      "computedHash": "7efaf0b4ba942a40093c5dffff6d3fd5af4bc6501959aae4f6d84a3c6c0f1388"
+    },
+    "migration-helper": {
+      "source": "get-convex/convex-agent-plugins",
+      "sourceType": "github",
+      "computedHash": "42d7bf896bba3a4109b9094f9f59d80c0acef83bf60199f892e2a128b278872e"
+    },
+    "next-best-practices": {
+      "source": "vercel-labs/next-skills",
+      "sourceType": "github",
+      "computedHash": "515ba75178bd44875812d9a560bdf14651f86709f89cf1d4f209638e879807f3"
+    },
+    "schema-builder": {
+      "source": "get-convex/convex-agent-plugins",
+      "sourceType": "github",
+      "computedHash": "2a587f944ae744b17ef724c66a661835e7e04b0f2dc4ca428c87f88854e7500c"
+    },
+    "vercel-composition-patterns": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "computedHash": "f98931159fa9c7fed043bcd18a891a46dcf89ababa38df13a4c5b7b30dc0ce07"
+    },
+    "vercel-react-best-practices": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "computedHash": "3462ec83f862abb2d532953df33a4dbf87f4616849da5d4b5cc7c13601aaf997"
+    },
+    "web-design-guidelines": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "computedHash": "a6a44d5498f7e8f68289902f3dedfc6f38ae0cee1e96527c80724cf27f727c2a"
+    }
+  }
+}

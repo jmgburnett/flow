@@ -1,0 +1,32 @@
+{
+  "name": "flow",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:ui": "pnpm --filter web test:ui",
+    "format": "biome format --write .",
+    "check": "biome check .",
+    "app:setup": "./scripts/setup",
+    "harness:risk-tier": "node scripts/harness/risk-tier.mjs",
+    "harness:docs-drift": "node scripts/harness/docs-drift-check.mjs",
+    "harness:pre-pr": "pnpm build && pnpm lint && pnpm typecheck && pnpm test && node scripts/harness/risk-tier.mjs",
+    "harness:ui:capture-browser-evidence": "node scripts/harness/ui-capture.mjs",
+    "harness:ui:verify-browser-evidence": "node scripts/harness/ui-verify.mjs",
+    "harness:ui:post-evidence": "node scripts/harness/ui-post-evidence.mjs",
+    "harness:logs": "node scripts/harness/query-logs.mjs",
+    "harness:logs:errors": "node scripts/harness/query-logs.mjs --level error",
+    "harness:logs:slow": "node scripts/harness/query-logs.mjs --slow 200",
+    "harness:logs:summary": "node scripts/harness/query-logs.mjs --summary",
+    "harness:logs:clear": "node scripts/harness/query-logs.mjs --clear"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.3",
+    "turbo": "^2.8.9",
+    "typescript": "^5.9.3"
+  },
+  "packageManager": "pnpm@10.30.0"
+}
