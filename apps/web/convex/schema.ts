@@ -5,9 +5,24 @@ import { v } from "convex/values";
 // by the Better Auth component in convex/betterAuth/.
 // Add your app-specific tables here.
 export default defineSchema({
+	// Google OAuth connections
+	google_connections: defineTable({
+		userId: v.string(),
+		email: v.string(),
+		accessToken: v.string(),
+		refreshToken: v.string(),
+		tokenExpiry: v.number(),
+		scopes: v.array(v.string()),
+		connectedAt: v.number(),
+		lastSyncAt: v.optional(v.number()),
+	}).index("by_user", ["userId"])
+		.index("by_email", ["email"]),
+
 	// Email management
 	emails: defineTable({
 		userId: v.string(),
+		accountEmail: v.string(), // Which Google account this email came from
+		gmailMessageId: v.string(), // Gmail's unique message ID
 		subject: v.string(),
 		from: v.string(),
 		to: v.array(v.string()),
@@ -24,11 +39,15 @@ export default defineSchema({
 		receivedAt: v.number(),
 	}).index("by_user", ["userId"])
 		.index("by_user_and_triage", ["userId", "triageStatus"])
-		.index("by_thread", ["threadId"]),
+		.index("by_thread", ["threadId"])
+		.index("by_account_email", ["accountEmail"])
+		.index("by_gmail_message_id", ["gmailMessageId"]),
 
 	// Calendar management
 	calendar_events: defineTable({
 		userId: v.string(),
+		accountEmail: v.string(), // Which Google account this event came from
+		googleEventId: v.string(), // Google Calendar's unique event ID
 		title: v.string(),
 		description: v.optional(v.string()),
 		startTime: v.number(),
@@ -37,7 +56,9 @@ export default defineSchema({
 		attendees: v.optional(v.array(v.string())),
 		prepNotes: v.optional(v.string()),
 	}).index("by_user", ["userId"])
-		.index("by_user_and_time", ["userId", "startTime"]),
+		.index("by_user_and_time", ["userId", "startTime"])
+		.index("by_account_email", ["accountEmail"])
+		.index("by_google_event_id", ["googleEventId"]),
 
 	// Recording management
 	recordings: defineTable({

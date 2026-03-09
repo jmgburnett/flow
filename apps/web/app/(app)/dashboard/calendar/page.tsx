@@ -5,8 +5,11 @@ import { DashboardLayout } from "@/components/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ChevronLeft, ChevronRight, Plus, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Plus, RefreshCw, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useQuery, useAction } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import Link from "next/link";
 
 // Mock events for MVP
 const mockEvents = [
@@ -76,8 +79,86 @@ const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 const hours = Array.from({ length: 13 }, (_, i) => i + 8); // 8am to 8pm
 
 export default function CalendarPage() {
-	const [selectedEvent, setSelectedEvent] = useState<typeof mockEvents[0] | null>(null);
+	const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
 	const [currentWeek, setCurrentWeek] = useState("March 10-14, 2026");
+	const [isSyncing, setIsSyncing] = useState(false);
+
+	// Get connections and events from Convex
+	const connections = useQuery(api.google.getGoogleConnections, {
+		userId: "josh",
+	});
+
+	// Get events for the next 7 days
+	const now = Date.now();
+	const sevenDaysLater = now + 7 * 24 * 60 * 60 * 1000;
+	const realEventsData = useQuery(api.google.getCalendarEvents, {
+		userId: "josh",
+		startTime: now,
+		endTime: sevenDaysLater,
+	});
+
+	const syncCalendar = useAction(api.google.syncCalendar);
+
+	// Transform real events to match the UI format
+	const realEvents = realEventsData?.map((event: any) => {
+		const startDate = new Date(event.startTime);
+		const endDate = new Date(event.endTime);
+		const duration = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60);
+		const dayOfWeek = startDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
+		const adjustedDay = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Convert to 0 = Monday
+		const hour = startDate.getHours() + startDate.getMinutes() / 60;
+
+		return {
+			id: event._id,
+			title: event.title,
+			startTime: hour,
+			duration,
+			day: adjustedDay,
+			attendees: event.attendees || [],
+			color: "bg-blue-500",
+			prepNotes: event.prepNotes || "",
+		};
+	}).filter((event: any) => event.day >= 0 && event.day < 5) || []; // Only show weekdays
+
+	// Use real events if available, otherwise fall back to mock data
+	const events = realEvents.length > 0 ? realEvents : mockEvents;
+
+	const selectedEvent = selectedEventId
+		? events.find((e: any) => e.id === selectedEventId) || null
+		: null;
+
+	const handleSync = async () => {
+		if (!connections || connections.length === 0) return;
+
+		setIsSyncing(true);
+		try {
+			await Promise.all(
+				connections.map((conn: any) => syncCalendar({ connectionId: conn._id })),
+			);
+		} catch (error) {
+			console.error("Sync failed:", error);
+		} finally {
+			setIsSyncing(false);
+		}
+	};
+
+	// Show empty state if no connections
+	if (connections !== undefined && connections.length === 0) {
+		return (
+			<DashboardLayout>
+				<div className="flex items-center justify-center h-full">
+					<div className="text-center space-y-4">
+						<p className="text-muted-foreground">
+							No Google accounts connected yet
+						</p>
+						<Link href="/dashboard/settings">
+							<Button>Connect Google Account</Button>
+						</Link>
+					</div>
+				</div>
+			</DashboardLayout>
+		);
+	}
 
 	return (
 		<DashboardLayout>
@@ -96,6 +177,24 @@ export default function CalendarPage() {
 							<Button variant="outline" size="sm">Today</Button>
 							<Button variant="outline" size="icon">
 								<ChevronRight className="h-4 w-4" />
+							</Button>
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={handleSync}
+								disabled={isSyncing || !connections}
+							>
+								{isSyncing ? (
+									<>
+										<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+										Syncing...
+									</>
+								) : (
+									<>
+										<RefreshCw className="mr-2 h-4 w-4" />
+										Sync
+									</>
+								)}
 							</Button>
 							<Button className="ml-4 gap-2">
 								<Plus className="h-4 w-4" />
@@ -130,15 +229,15 @@ export default function CalendarPage() {
 											<div key={hour} className="h-20 border-b" />
 										))}
 										{/* Events for this day */}
-										{mockEvents
-											.filter((event) => event.day === dayIndex)
-											.map((event) => {
+										{events
+											.filter((event: any) => event.day === dayIndex)
+											.map((event: any) => {
 												const topPosition = (event.startTime - 8) * 80; // 80px per hour
 												const height = event.duration * 80;
 												return (
 													<div
 														key={event.id}
-														onClick={() => setSelectedEvent(event)}
+														onClick={() => setSelectedEventId(event.id)}
 														className={cn(
 															"absolute left-1 right-1 rounded p-2 cursor-pointer text-white text-xs overflow-hidden",
 															event.color,
@@ -171,7 +270,7 @@ export default function CalendarPage() {
 						<div>
 							<div className="flex items-start justify-between mb-4">
 								<div className={cn("w-3 h-3 rounded-full", selectedEvent.color)} />
-								<Button variant="ghost" size="sm" onClick={() => setSelectedEvent(null)}>
+								<Button variant="ghost" size="sm" onClick={() => setSelectedEventId(null)}>
 									Close
 								</Button>
 							</div>
@@ -191,7 +290,7 @@ export default function CalendarPage() {
 									<div className="flex items-start gap-2 text-muted-foreground">
 										<Users className="h-4 w-4 mt-0.5" />
 										<div>
-											{selectedEvent.attendees.map((attendee, i) => (
+											{selectedEvent.attendees.map((attendee: any, i: number) => (
 												<div key={i}>{attendee}</div>
 											))}
 										</div>

@@ -7,10 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Archive, Clock, Forward, Reply } from "lucide-react";
+import { Archive, Clock, Forward, Loader2, RefreshCw, Reply } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useQuery, useAction, useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import Link from "next/link";
 
-// Mock data for MVP
+// Mock data for fallback
 const mockEmails = [
 	{
 		id: "1",
@@ -76,21 +79,126 @@ const triageBadges = {
 	ignore: { label: "Ignore", variant: "outline" as const, color: "text-gray-500" },
 };
 
-export default function InboxPage() {
-	const [selectedEmail, setSelectedEmail] = useState(mockEmails[0]);
-	const [filter, setFilter] = useState<"all" | "needs_me" | "draft_ready" | "handled">("all");
+function formatTimestamp(timestamp: number): string {
+	const now = Date.now();
+	const diff = now - timestamp;
+	const hours = diff / (1000 * 60 * 60);
+	const days = diff / (1000 * 60 * 60 * 24);
 
-	const filteredEmails = filter === "all"
-		? mockEmails
-		: mockEmails.filter((email) => email.triage === filter);
+	if (hours < 24) {
+		return new Date(timestamp).toLocaleTimeString("en-US", {
+			hour: "numeric",
+			minute: "2-digit",
+		});
+	}
+	if (days < 2) {
+		return "Yesterday";
+	}
+	if (days < 7) {
+		return `${Math.floor(days)} days ago`;
+	}
+	return new Date(timestamp).toLocaleDateString();
+}
+
+export default function InboxPage() {
+	const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
+	const [filter, setFilter] = useState<"all" | "needs_me" | "draft_ready" | "handled">("all");
+	const [isSyncing, setIsSyncing] = useState(false);
+
+	// Fetch connections and emails from Convex
+	const connections = useQuery(api.google.getGoogleConnections, {
+		userId: "josh",
+	});
+
+	const realEmailsData = useQuery(api.google.getEmails, {
+		userId: "josh",
+		triageStatus: filter === "all" ? undefined : filter,
+	});
+
+	const syncGmail = useAction(api.google.syncGmailInbox);
+
+	// Transform real emails to match the UI format
+	const realEmails = realEmailsData?.map((email: any) => ({
+		id: email._id,
+		from: email.from.split("<")[0].trim() || email.from,
+		fromEmail: email.from.match(/<(.+)>/)?.[1] || email.from,
+		subject: email.subject,
+		preview: email.body.slice(0, 100),
+		body: email.body,
+		time: formatTimestamp(email.receivedAt),
+		triage: email.triageStatus,
+		unread: true, // We could add an unread field to the schema later
+	})) || [];
+
+	// Use real emails if available, otherwise fall back to mock data
+	const emails = realEmails.length > 0 ? realEmails : mockEmails;
+
+	const filteredEmails = emails;
+
+	const selectedEmail = selectedEmailId
+		? filteredEmails.find((e: any) => e.id === selectedEmailId) || filteredEmails[0]
+		: filteredEmails[0];
+
+	const handleSync = async () => {
+		if (!connections || connections.length === 0) return;
+
+		setIsSyncing(true);
+		try {
+			await Promise.all(
+				connections.map((conn: any) => syncGmail({ connectionId: conn._id })),
+			);
+		} catch (error) {
+			console.error("Sync failed:", error);
+		} finally {
+			setIsSyncing(false);
+		}
+	};
+
+	// Show empty state if no connections
+	if (connections !== undefined && connections.length === 0) {
+		return (
+			<DashboardLayout>
+				<div className="flex items-center justify-center h-full">
+					<div className="text-center space-y-4">
+						<p className="text-muted-foreground">
+							No Google accounts connected yet
+						</p>
+						<Link href="/dashboard/settings">
+							<Button>Connect Google Account</Button>
+						</Link>
+					</div>
+				</div>
+			</DashboardLayout>
+		);
+	}
 
 	return (
 		<DashboardLayout>
 			<div className="flex h-full">
 				{/* Email List */}
 				<div className="w-[400px] border-r flex flex-col">
-					<div className="p-4 border-b">
-						<h1 className="text-xl font-bold mb-4">Inbox</h1>
+					<div className="p-4 border-b space-y-3">
+						<div className="flex items-center justify-between">
+							<h1 className="text-xl font-bold">Inbox</h1>
+							<Button
+								size="sm"
+								variant="outline"
+								onClick={handleSync}
+								disabled={isSyncing || !connections}
+							>
+								{isSyncing ? (
+									<>
+										<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+										Syncing...
+									</>
+								) : (
+									<>
+										<RefreshCw className="mr-2 h-4 w-4" />
+										Sync
+									</>
+								)}
+							</Button>
+						</div>
 						<Tabs value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
 							<TabsList className="grid w-full grid-cols-4">
 								<TabsTrigger value="all" className="text-xs">All</TabsTrigger>
@@ -101,12 +209,12 @@ export default function InboxPage() {
 						</Tabs>
 					</div>
 					<div className="flex-1 overflow-auto">
-						{filteredEmails.map((email) => {
-							const badge = triageBadges[email.triage];
+						{filteredEmails.map((email: any) => {
+							const badge = triageBadges[email.triage as keyof typeof triageBadges];
 							return (
 								<div
 									key={email.id}
-									onClick={() => setSelectedEmail(email)}
+									onClick={() => setSelectedEmailId(email.id)}
 									className={cn(
 										"p-4 border-b cursor-pointer transition-colors hover:bg-accent",
 										selectedEmail?.id === email.id && "bg-accent",
@@ -160,8 +268,8 @@ export default function InboxPage() {
 												<p className="text-sm font-medium">{selectedEmail.from}</p>
 												<p className="text-xs text-muted-foreground">{selectedEmail.fromEmail}</p>
 											</div>
-											<Badge variant={triageBadges[selectedEmail.triage].variant}>
-												{triageBadges[selectedEmail.triage].label}
+											<Badge variant={triageBadges[selectedEmail.triage as keyof typeof triageBadges].variant}>
+												{triageBadges[selectedEmail.triage as keyof typeof triageBadges].label}
 											</Badge>
 										</div>
 									</div>
