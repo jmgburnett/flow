@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
 	DropdownMenu,
@@ -20,14 +19,8 @@ import {
 	Home,
 	Inbox,
 	Calendar,
-	Mic,
-	CheckSquare,
-	Users,
-	Settings,
-	Menu,
-	X,
-	Search,
-	MessageSquare,
+	MessageCircle,
+	MoreHorizontal,
 } from "lucide-react";
 
 interface DashboardLayoutProps {
@@ -39,150 +32,136 @@ interface DashboardLayoutProps {
 	};
 }
 
-const navigation = [
+// Bottom navigation for mobile
+const mobileNavigation = [
 	{ name: "Home", href: "/dashboard", icon: Home },
 	{ name: "Inbox", href: "/dashboard/inbox", icon: Inbox },
+	{ name: "Messages", href: "/dashboard/messages", icon: MessageCircle },
 	{ name: "Calendar", href: "/dashboard/calendar", icon: Calendar },
-	{ name: "Recordings", href: "/dashboard/recordings", icon: Mic },
-	{ name: "Tasks", href: "/dashboard/tasks", icon: CheckSquare },
-	{ name: "People", href: "/dashboard/people", icon: Users },
-	{ name: "Settings", href: "/dashboard/settings", icon: Settings },
+	{ name: "More", href: "/dashboard/more", icon: MoreHorizontal },
 ];
 
 export function DashboardLayout({ children, user }: DashboardLayoutProps) {
-	const [sidebarOpen, setSidebarOpen] = useState(true);
 	const pathname = usePathname();
 
 	const displayName = user?.name || user?.email || "User";
 	const avatarUrl = user?.image || undefined;
 	const initials = user?.name?.[0] || user?.email?.[0]?.toUpperCase() || "U";
 
+	// Get time-based greeting
+	const getGreeting = () => {
+		const hour = new Date().getHours();
+		if (hour < 12) return "Good morning";
+		if (hour < 18) return "Good afternoon";
+		return "Good evening";
+	};
+
 	return (
-		<div className="flex h-screen bg-background">
-			{/* Sidebar */}
-			<aside
-				className={cn(
-					"flex flex-col border-r bg-slate-950 text-slate-100 transition-all duration-300",
-					sidebarOpen ? "w-64" : "w-0 overflow-hidden",
-				)}
-			>
-				<div className="flex h-16 items-center justify-between px-4 border-b border-slate-800">
-					<h1 className="text-xl font-bold text-blue-400">Flow</h1>
-					<Button
-						variant="ghost"
-						size="icon"
-						onClick={() => setSidebarOpen(false)}
-						className="text-slate-400 hover:text-slate-100 hover:bg-slate-800"
-					>
-						<X className="h-5 w-5" />
-					</Button>
+		<div className="flex h-screen flex-col bg-background">
+			{/* Top bar - mobile optimized */}
+			<header className="flex h-14 items-center justify-between border-b bg-background px-4 md:px-6">
+				<div className="flex items-center gap-3">
+					<h1 className="text-lg font-semibold md:text-xl">
+						{getGreeting()}, {user?.name || "Josh"}
+					</h1>
 				</div>
 
-				<nav className="flex-1 space-y-1 px-2 py-4">
-					{navigation.map((item) => {
+				{/* User menu */}
+				<DropdownMenu>
+					<DropdownMenuTrigger asChild>
+						<Button variant="ghost" className="relative h-9 w-9 rounded-full">
+							<Avatar className="h-9 w-9">
+								<AvatarImage src={avatarUrl} />
+								<AvatarFallback>{initials}</AvatarFallback>
+							</Avatar>
+						</Button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="end">
+						<DropdownMenuLabel>
+							<div className="flex flex-col space-y-1">
+								<p className="text-sm font-medium leading-none">{displayName}</p>
+								<p className="text-xs leading-none text-muted-foreground">
+									{user?.email}
+								</p>
+							</div>
+						</DropdownMenuLabel>
+						<DropdownMenuSeparator />
+						<DropdownMenuItem asChild>
+							<Link href="/dashboard/more">Settings</Link>
+						</DropdownMenuItem>
+						<DropdownMenuItem asChild>
+							<Link href="/api/auth/sign-out">Sign out</Link>
+						</DropdownMenuItem>
+					</DropdownMenuContent>
+				</DropdownMenu>
+			</header>
+
+			{/* Page content */}
+			<main className="flex-1 overflow-auto pb-20 md:pb-4">
+				{children}
+			</main>
+
+			{/* Bottom navigation - mobile only */}
+			<nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden">
+				<div className="mx-4 mb-4 rounded-full border bg-background/95 backdrop-blur-lg shadow-lg">
+					<div className="flex items-center justify-around px-2 py-2">
+						{mobileNavigation.map((item) => {
+							const Icon = item.icon;
+							const isActive = pathname === item.href ||
+								(item.href !== "/dashboard" && pathname?.startsWith(item.href));
+							return (
+								<Link
+									key={item.name}
+									href={item.href}
+									className={cn(
+										"flex flex-col items-center gap-1 rounded-full px-4 py-2 transition-all min-w-[60px]",
+										isActive
+											? "bg-blue-600 text-white"
+											: "text-muted-foreground",
+									)}
+								>
+									<Icon className={cn("h-5 w-5", isActive ? "fill-current" : "")} />
+									{isActive && (
+										<span className="text-[10px] font-medium">{item.name}</span>
+									)}
+								</Link>
+							);
+						})}
+					</div>
+				</div>
+			</nav>
+
+			{/* Desktop sidebar - shown on larger screens */}
+			<aside className="hidden md:fixed md:inset-y-0 md:left-0 md:z-50 md:flex md:w-20 md:flex-col md:border-r md:bg-slate-950">
+				<div className="flex h-14 items-center justify-center border-b border-slate-800">
+					<h1 className="text-xl font-bold text-blue-400">F</h1>
+				</div>
+				<nav className="flex flex-1 flex-col items-center gap-2 py-4">
+					{mobileNavigation.map((item) => {
 						const Icon = item.icon;
-						const isActive = pathname === item.href;
+						const isActive = pathname === item.href ||
+							(item.href !== "/dashboard" && pathname?.startsWith(item.href));
 						return (
 							<Link
 								key={item.name}
 								href={item.href}
 								className={cn(
-									"flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+									"flex h-12 w-12 items-center justify-center rounded-lg transition-colors",
 									isActive
 										? "bg-blue-600 text-white"
-										: "text-slate-300 hover:bg-slate-800 hover:text-white",
+										: "text-slate-400 hover:bg-slate-800 hover:text-white",
 								)}
+								title={item.name}
 							>
 								<Icon className="h-5 w-5" />
-								{item.name}
 							</Link>
 						);
 					})}
 				</nav>
-
-				{/* Flobot avatar at bottom */}
-				<div className="border-t border-slate-800 p-4">
-					<div className="flex items-center gap-3">
-						<div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600">
-							<MessageSquare className="h-5 w-5 text-white" />
-						</div>
-						<div className="flex-1">
-							<p className="text-sm font-medium">Flobot</p>
-							<p className="text-xs text-slate-400">AI Chief of Staff</p>
-						</div>
-					</div>
-				</div>
 			</aside>
 
-			{/* Main content */}
-			<div className="flex flex-1 flex-col overflow-hidden">
-				{/* Top bar */}
-				<header className="flex h-16 items-center gap-4 border-b bg-background px-6">
-					{!sidebarOpen && (
-						<Button
-							variant="ghost"
-							size="icon"
-							onClick={() => setSidebarOpen(true)}
-						>
-							<Menu className="h-5 w-5" />
-						</Button>
-					)}
-
-					{/* Search */}
-					<div className="flex-1 max-w-2xl">
-						<div className="relative">
-							<Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-							<Input
-								placeholder="Search emails, tasks, recordings..."
-								className="pl-10"
-							/>
-						</div>
-					</div>
-
-					{/* Voice command button */}
-					<Button
-						variant="outline"
-						size="icon"
-						className="rounded-full"
-					>
-						<Mic className="h-5 w-5" />
-					</Button>
-
-					{/* User menu */}
-					<DropdownMenu>
-						<DropdownMenuTrigger asChild>
-							<Button variant="ghost" className="relative h-10 w-10 rounded-full">
-								<Avatar className="h-10 w-10">
-									<AvatarImage src={avatarUrl} />
-									<AvatarFallback>{initials}</AvatarFallback>
-								</Avatar>
-							</Button>
-						</DropdownMenuTrigger>
-						<DropdownMenuContent align="end">
-							<DropdownMenuLabel>
-								<div className="flex flex-col space-y-1">
-									<p className="text-sm font-medium leading-none">{displayName}</p>
-									<p className="text-xs leading-none text-muted-foreground">
-										{user?.email}
-									</p>
-								</div>
-							</DropdownMenuLabel>
-							<DropdownMenuSeparator />
-							<DropdownMenuItem asChild>
-								<Link href="/dashboard/settings">Settings</Link>
-							</DropdownMenuItem>
-							<DropdownMenuItem asChild>
-								<Link href="/api/auth/sign-out">Sign out</Link>
-							</DropdownMenuItem>
-						</DropdownMenuContent>
-					</DropdownMenu>
-				</header>
-
-				{/* Page content */}
-				<main className="flex-1 overflow-auto">
-					{children}
-				</main>
-			</div>
+			{/* Add padding on desktop for sidebar */}
+			<div className="hidden md:block md:w-20" />
 
 			{/* Floating chat interface */}
 			<ChatInterface />

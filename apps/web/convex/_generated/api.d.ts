@@ -14,6 +14,7 @@ import type * as functions from "../functions.js";
 import type * as google from "../google.js";
 import type * as http from "../http.js";
 import type * as seed from "../seed.js";
+import type * as sms from "../sms.js";
 
 import type {
   ApiFromModules,
@@ -28,6 +29,7 @@ declare const fullApi: ApiFromModules<{
   google: typeof google;
   http: typeof http;
   seed: typeof seed;
+  sms: typeof sms;
 }>;
 
 /**

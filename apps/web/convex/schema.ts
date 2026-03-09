@@ -136,4 +136,31 @@ export default defineSchema({
 		generatedAt: v.number(),
 	}).index("by_user", ["userId"])
 		.index("by_user_and_date", ["userId", "date"]),
+
+	// SMS Messages
+	sms_messages: defineTable({
+		userId: v.string(),
+		direction: v.union(v.literal("inbound"), v.literal("outbound")),
+		from: v.string(), // Phone number
+		to: v.string(), // Phone number
+		body: v.string(),
+		timestamp: v.number(),
+		read: v.boolean(),
+		contactName: v.optional(v.string()),
+	}).index("by_user", ["userId"])
+		.index("by_user_and_timestamp", ["userId", "timestamp"])
+		.index("by_from", ["from"])
+		.index("by_to", ["to"]),
+
+	// SMS Conversations
+	sms_conversations: defineTable({
+		userId: v.string(),
+		phoneNumber: v.string(),
+		contactName: v.optional(v.string()),
+		lastMessage: v.string(),
+		lastMessageAt: v.number(),
+		unreadCount: v.number(),
+	}).index("by_user", ["userId"])
+		.index("by_user_and_last_message", ["userId", "lastMessageAt"])
+		.index("by_phone_number", ["phoneNumber"]),
 });
