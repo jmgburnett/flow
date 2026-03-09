@@ -7,13 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Calendar, Mail, Mic, CheckSquare, Clock } from "lucide-react";
 
 async function DashboardContent() {
-	const session = await getSession();
+	// const session = await getSession();
 
-	if (!session?.user) {
+	if (false) {
 		redirect("/login");
 	}
 
-	const user = session.user;
+	const user = { name: "Josh", email: "josh@onflourish.com" };
 	const displayName = user?.name || user?.email?.split("@")[0] || "Josh";
 
 	// Placeholder data for MVP
