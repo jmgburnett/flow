@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -1329,8 +1329,373 @@ JSON only:`,
 });
 
 // ═══════════════════════════════════════════════
-// FULL ENRICHMENT PIPELINE
+// DAILY ENRICHMENT PIPELINE — runs from Convex cron
 // ═══════════════════════════════════════════════
-// Note: Convex actions can't call other actions.
-// Call filterProfiles, enrichFromCalendar, and enrichFromInboundEmails
-// sequentially from the client (or from the CLI/API).
+
+export const dailyEnrichmentPipeline = internalAction({
+	args: { userId: v.string() },
+	handler: async (ctx, args) => {
+		const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+		if (!ANTHROPIC_API_KEY) {
+			console.error("dailyEnrichmentPipeline: ANTHROPIC_API_KEY not configured");
+			return;
+		}
+
+		console.log("═══ Daily Profile Enrichment Starting ═══");
+
+		// ── Step 1: Sync Gmail inboxes ──
+		const connections = await ctx.runQuery(internal.profileBuilder.getAllConnections, {
+			userId: args.userId,
+		});
+
+		let totalNewEmails = 0;
+		let totalNewEvents = 0;
+
+		for (const conn of connections) {
+			try {
+				const emailResult = await ctx.runAction(internal.google.syncGmailInboxInternal, {
+					connectionId: conn._id,
+				});
+				totalNewEmails += emailResult.newEmails;
+				console.log(`Email sync ${conn.email}: ${emailResult.newEmails} new`);
+			} catch (e) {
+				console.error(`Email sync failed for ${conn.email}:`, e);
+			}
+
+			try {
+				const calResult = await ctx.runAction(internal.google.syncCalendarInternal, {
+					connectionId: conn._id,
+				});
+				totalNewEvents += calResult.newEvents;
+				console.log(`Calendar sync ${conn.email}: ${calResult.newEvents} new`);
+			} catch (e) {
+				console.error(`Calendar sync failed for ${conn.email}:`, e);
+			}
+		}
+
+		// ── Step 2: Build new profiles from sent emails ──
+		const buildResult = await ctx.runAction(internal.profileBuilder.buildProfilesInternal, {
+			userId: args.userId,
+			maxEmailsPerAccount: 200,
+		});
+		console.log(`Profile build: ${buildResult.profilesBuilt} new profiles`);
+
+		// ── Step 3: Filter junk ──
+		const filterResult = await ctx.runAction(internal.profileBuilder.filterProfilesInternal, {
+			userId: args.userId,
+		});
+		console.log(`Filter: removed ${filterResult.deleted}, kept ${filterResult.kept}`);
+
+		// ── Step 4: Enrich from calendar ──
+		const calEnrich = await ctx.runAction(internal.profileBuilder.enrichFromCalendarInternal, {
+			userId: args.userId,
+		});
+		console.log(`Calendar enrich: ${calEnrich.enriched} updated, ${calEnrich.newFromCalendar} new`);
+
+		// ── Step 5: Enrich from inbound emails ──
+		const inboundEnrich = await ctx.runAction(internal.profileBuilder.enrichFromInboundEmailsInternal, {
+			userId: args.userId,
+		});
+		console.log(`Inbound enrich: ${inboundEnrich.enriched} updated`);
+
+		console.log("═══ Daily Profile Enrichment Complete ═══");
+		console.log(`Summary: ${totalNewEmails} new emails, ${totalNewEvents} new events, ${buildResult.profilesBuilt} new profiles, ${filterResult.deleted} filtered, ${calEnrich.enriched + inboundEnrich.enriched} enriched`);
+	},
+});
+
+// Internal versions of all pipeline actions (callable from other actions)
+
+export const buildProfilesInternal = internalAction({
+	args: {
+		userId: v.string(),
+		maxEmailsPerAccount: v.optional(v.number()),
+	},
+	handler: async (ctx, args) => {
+		// Reuse the same logic as buildProfiles but as internalAction
+		const maxEmails = args.maxEmailsPerAccount ?? 200;
+		const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+		if (!ANTHROPIC_API_KEY) return { profilesBuilt: 0, totalRecipients: 0, accountsScanned: 0 };
+
+		const buildId = await ctx.runMutation(internal.profileBuilder.createBuildProgress, {
+			userId: args.userId,
+		});
+
+		try {
+			await ctx.runMutation(internal.profileBuilder.updateBuildProgress, {
+				buildId, status: "scanning", progress: 5, message: "Scanning sent emails...",
+			});
+
+			const connections = await ctx.runQuery(internal.profileBuilder.getAllConnections, {
+				userId: args.userId,
+			});
+
+			const recipientMap: Map<string, {
+				name: string;
+				sentEmails: Array<{ subject: string; body: string; date: number; fromAccount: string }>;
+			}> = new Map();
+
+			let accountsScanned = 0;
+			for (const conn of connections) {
+				try {
+					const accessToken = await refreshToken(ctx, conn._id);
+					const sentEmails = await fetchSentEmails(accessToken, maxEmails);
+
+					for (const email of sentEmails) {
+						if (OWN_EMAILS.includes(email.to)) continue;
+						if (SYSTEM_PATTERN.test(email.to)) continue;
+
+						const existing = recipientMap.get(email.to) || { name: email.toName, sentEmails: [] };
+						existing.sentEmails.push({
+							subject: email.subject, body: email.body, date: email.date, fromAccount: conn.email,
+						});
+						if (email.toName && email.toName.length > existing.name.length && !email.toName.includes("@")) {
+							existing.name = email.toName;
+						}
+						recipientMap.set(email.to, existing);
+					}
+					accountsScanned++;
+				} catch (e) {
+					console.error(`Error scanning ${conn.email}:`, e);
+				}
+			}
+
+			const qualifiedRecipients = Array.from(recipientMap.entries())
+				.filter(([_, data]) => data.sentEmails.length >= 2)
+				.sort((a, b) => b[1].sentEmails.length - a[1].sentEmails.length);
+
+			await ctx.runMutation(internal.profileBuilder.updateBuildProgress, {
+				buildId, status: "building", progress: 35,
+				message: `Found ${qualifiedRecipients.length} contacts to profile`,
+				totalRecipients: qualifiedRecipients.length,
+			});
+
+			let profilesBuilt = 0;
+
+			for (let i = 0; i < qualifiedRecipients.length; i += 5) {
+				const batch = qualifiedRecipients.slice(i, i + 5);
+				await Promise.all(batch.map(async ([email, data]) => {
+					try {
+						// Check if profile already exists
+						const exists = await ctx.runQuery(internal.profileBuilder.profileExists, {
+							userId: args.userId, email,
+						});
+						if (exists) return; // Skip — already profiled
+
+						const sortedEmails = data.sentEmails.sort((a, b) => b.date - a.date).slice(0, 10);
+						const emailSamples = sortedEmails.map((e) =>
+							`[${new Date(e.date).toISOString().split("T")[0]}] Subject: ${e.subject}\nFrom: ${e.fromAccount}\n${e.body.slice(0, 300)}`
+						).join("\n\n---\n\n");
+
+						const resp = await fetch("https://api.anthropic.com/v1/messages", {
+							method: "POST",
+							headers: {
+								"Content-Type": "application/json",
+								"x-api-key": ANTHROPIC_API_KEY!,
+								"anthropic-version": "2023-06-01",
+							},
+							body: JSON.stringify({
+								model: "claude-3-haiku-20240307",
+								max_tokens: 800,
+								messages: [{ role: "user", content: `Analyze these ${data.sentEmails.length} sent emails from Josh Burnett to ${data.name} (${email}) and build a contact profile.\n\nEMAILS:\n${emailSamples}\n\nReturn a JSON object with these exact fields:\n{\n  "relationshipSummary": "Brief description (1-2 sentences)",\n  "topics": ["array", "of", "topics"],\n  "communicationStyle": "How Josh communicates with this person",\n  "sentiment": "overall tone",\n  "keyContext": "Important context for AI drafting"\n}\n\nJSON only, no markdown:` }],
+							}),
+						});
+
+						if (!resp.ok) return;
+						const respData: { content: Array<{ text: string }> } = await resp.json();
+						let text = respData.content[0].text.trim();
+						if (text.startsWith("```")) text = text.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
+						const profileJson = JSON.parse(text);
+
+						const contact = await ctx.runQuery(internal.profileBuilder.findContactByEmail, { userId: args.userId, email });
+						const recentInteractions = sortedEmails.slice(0, 5).map((e) => ({ date: e.date, type: "email_sent", summary: e.subject }));
+
+						await ctx.runMutation(internal.profileBuilder.upsertProfile, {
+							userId: args.userId, contactId: contact?._id, email,
+							name: data.name,
+							relationshipSummary: profileJson.relationshipSummary || "",
+							topics: profileJson.topics || [],
+							communicationStyle: profileJson.communicationStyle || "",
+							sentiment: profileJson.sentiment || "professional",
+							keyContext: profileJson.keyContext || "",
+							recentInteractions,
+							emailsSent: data.sentEmails.length,
+							emailsReceived: 0,
+							lastInteractionDate: sortedEmails[0]?.date,
+							sources: ["email"],
+							rawEmailSamples: JSON.stringify(sortedEmails.slice(0, 5).map((e) => ({ subject: e.subject, body: e.body.slice(0, 200), date: e.date }))),
+						});
+						profilesBuilt++;
+					} catch { /* skip failed profiles */ }
+				}));
+			}
+
+			await ctx.runMutation(internal.profileBuilder.updateBuildProgress, {
+				buildId, status: "complete", progress: 100,
+				message: `Built ${profilesBuilt} profiles from ${accountsScanned} accounts`,
+				profilesBuilt,
+			});
+
+			return { profilesBuilt, totalRecipients: qualifiedRecipients.length, accountsScanned };
+		} catch (e) {
+			await ctx.runMutation(internal.profileBuilder.updateBuildProgress, {
+				buildId, status: "error", message: `Error: ${String(e).slice(0, 200)}`,
+			});
+			return { profilesBuilt: 0, totalRecipients: 0, accountsScanned: 0 };
+		}
+	},
+});
+
+export const filterProfilesInternal = internalAction({
+	args: { userId: v.string() },
+	handler: async (ctx, args) => {
+		const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+		if (!ANTHROPIC_API_KEY) return { filtered: 0, kept: 0, deleted: 0, message: "no api key" };
+
+		const profiles = await ctx.runQuery(internal.profileBuilder.getAllProfiles, { userId: args.userId });
+		const unclassified = profiles.filter((p) => p.isReal === undefined);
+		if (unclassified.length === 0) return { filtered: 0, kept: 0, deleted: 0, message: "all classified" };
+
+		let autoFiltered = 0, aiFiltered = 0, kept = 0, deleted = 0;
+		const ambiguous: typeof unclassified = [];
+
+		for (const profile of unclassified) {
+			const check = isObviouslyJunk(profile.email);
+			if (check.junk) {
+				await ctx.runMutation(internal.profileBuilder.deleteProfile, { profileId: profile._id });
+				autoFiltered++; deleted++;
+			} else {
+				ambiguous.push(profile);
+			}
+		}
+
+		for (let i = 0; i < ambiguous.length; i += 20) {
+			const batch = ambiguous.slice(i, i + 20);
+			const profileList = batch.map((p, idx) =>
+				`${idx + 1}. "${p.name}" <${p.email}> — ${p.emailsSent} sent. Summary: ${p.relationshipSummary.slice(0, 100)}`
+			).join("\n");
+
+			try {
+				const resp = await fetch("https://api.anthropic.com/v1/messages", {
+					method: "POST",
+					headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+					body: JSON.stringify({
+						model: "claude-3-haiku-20240307", max_tokens: 1000,
+						messages: [{ role: "user", content: `Classify each as REAL (real person) or JUNK (marketing/automated/newsletter).\n\nCONTACTS:\n${profileList}\n\nReturn JSON array: [{"index": 1, "real": true/false, "reason": "brief reason"}]\n\nJSON only:` }],
+					}),
+				});
+				if (!resp.ok) continue;
+				const respData: { content: Array<{ text: string }> } = await resp.json();
+				let text = respData.content[0].text.trim();
+				if (text.startsWith("```")) text = text.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
+				const classifications = JSON.parse(text);
+
+				for (const c of classifications) {
+					const idx = c.index - 1;
+					if (idx < 0 || idx >= batch.length) continue;
+					if (c.real) {
+						await ctx.runMutation(internal.profileBuilder.patchProfile, {
+							profileId: batch[idx]._id, patch: { isReal: true, filterReason: c.reason, updatedAt: Date.now() },
+						});
+						kept++;
+					} else {
+						await ctx.runMutation(internal.profileBuilder.deleteProfile, { profileId: batch[idx]._id });
+						aiFiltered++; deleted++;
+					}
+				}
+			} catch { /* skip batch on error */ }
+		}
+
+		return { filtered: autoFiltered + aiFiltered, autoFiltered, aiFiltered, kept, deleted, message: `Filtered ${deleted} junk, kept ${kept} real` };
+	},
+});
+
+export const enrichFromCalendarInternal = internalAction({
+	args: { userId: v.string() },
+	handler: async (ctx, args) => {
+		const profiles = await ctx.runQuery(internal.profileBuilder.getAllProfiles, { userId: args.userId });
+		const events = await ctx.runQuery(internal.profileBuilder.getAllCalendarEvents, { userId: args.userId });
+
+		const meetingMap: Map<string, { count: number; topics: string[]; latestDate: number }> = new Map();
+		for (const event of events) {
+			for (const attendeeEmail of (event.attendees || [])) {
+				const email = attendeeEmail.toLowerCase();
+				if (OWN_EMAILS.includes(email)) continue;
+				const existing = meetingMap.get(email) || { count: 0, topics: [], latestDate: 0 };
+				existing.count++;
+				if (event.title && !existing.topics.includes(event.title)) existing.topics.push(event.title);
+				if (event.startTime > existing.latestDate) existing.latestDate = event.startTime;
+				meetingMap.set(email, existing);
+			}
+		}
+
+		let enriched = 0, newFromCalendar = 0;
+
+		for (const profile of profiles) {
+			const calData = meetingMap.get(profile.email);
+			if (calData) {
+				const sources = [...profile.sources];
+				if (!sources.includes("calendar")) sources.push("calendar");
+				const lastDate = Math.max(profile.lastInteractionDate || 0, calData.latestDate);
+				await ctx.runMutation(internal.profileBuilder.patchProfile, {
+					profileId: profile._id,
+					patch: { sharedMeetings: calData.count, meetingTopics: calData.topics.slice(-10), sources, lastInteractionDate: lastDate, updatedAt: Date.now() },
+				});
+				enriched++;
+				meetingMap.delete(profile.email);
+			}
+		}
+
+		for (const [email, calData] of meetingMap.entries()) {
+			if (calData.count < 2) continue;
+			if (SYSTEM_PATTERN.test(email)) continue;
+			if (isObviouslyJunk(email).junk) continue;
+			const contact = await ctx.runQuery(internal.profileBuilder.findContactByEmail, { userId: args.userId, email });
+			const name = email.split("@")[0].replace(/\./g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+			await ctx.runMutation(internal.profileBuilder.upsertProfile, {
+				userId: args.userId, contactId: contact?._id, email, name,
+				relationshipSummary: `Meets with Josh regularly (${calData.count} meetings).`,
+				topics: calData.topics.slice(-5), communicationStyle: "Unknown — calendar-only",
+				sentiment: "professional", keyContext: `Calendar-only. ${calData.count} meetings.`,
+				recentInteractions: [{ date: calData.latestDate, type: "calendar", summary: calData.topics[calData.topics.length - 1] || "Meeting" }],
+				emailsSent: 0, emailsReceived: 0, lastInteractionDate: calData.latestDate, sources: ["calendar"],
+			});
+			newFromCalendar++;
+		}
+
+		return { enriched, newFromCalendar, totalMeetings: events.length, message: `Enriched ${enriched}, created ${newFromCalendar} new` };
+	},
+});
+
+export const enrichFromInboundEmailsInternal = internalAction({
+	args: { userId: v.string() },
+	handler: async (ctx, args) => {
+		const profiles = await ctx.runQuery(internal.profileBuilder.getAllProfiles, { userId: args.userId });
+		const emails = await ctx.runQuery(internal.profileBuilder.getAllEmails, { userId: args.userId });
+
+		const inboundMap: Map<string, { count: number; latestDate: number; latestSubject: string }> = new Map();
+		for (const email of emails) {
+			const senderMatch = email.from.match(/<(.+?)>/);
+			const senderEmail = senderMatch ? senderMatch[1].toLowerCase() : email.from.toLowerCase().trim();
+			if (!senderEmail.includes("@") || OWN_EMAILS.includes(senderEmail)) continue;
+			const existing = inboundMap.get(senderEmail) || { count: 0, latestDate: 0, latestSubject: "" };
+			existing.count++;
+			if (email.receivedAt > existing.latestDate) { existing.latestDate = email.receivedAt; existing.latestSubject = email.subject; }
+			inboundMap.set(senderEmail, existing);
+		}
+
+		let enriched = 0;
+		for (const profile of profiles) {
+			const inbound = inboundMap.get(profile.email);
+			if (inbound) {
+				const lastDate = Math.max(profile.lastInteractionDate || 0, inbound.latestDate);
+				await ctx.runMutation(internal.profileBuilder.patchProfile, {
+					profileId: profile._id,
+					patch: { emailsReceived: inbound.count, lastInteractionDate: lastDate, updatedAt: Date.now() },
+				});
+				enriched++;
+			}
+		}
+
+		return { enriched, totalInboundEmails: emails.length, uniqueSenders: inboundMap.size, message: `Enriched ${enriched} profiles` };
+	},
+});

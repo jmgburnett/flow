@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -915,3 +915,179 @@ Body: ${body.slice(0, 500)}`,
 		return "needs_me";
 	}
 }
+
+// ─── Internal action wrappers for cron pipeline ───
+// These allow the daily enrichment cron (in profileBuilder) to call sync functions
+
+export const syncGmailInboxInternal = internalAction({
+	args: { connectionId: v.id("google_connections") },
+	handler: async (ctx, args): Promise<{ newEmails: number }> => {
+		const accessToken = await refreshTokenIfNeeded(ctx, args.connectionId);
+		const connection = await ctx.runQuery(internal.google.getConnection, {
+			connectionId: args.connectionId,
+		});
+		if (!connection) throw new Error("Connection not found");
+
+		const listResponse = await fetch(
+			"https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=50&labelIds=INBOX",
+			{ headers: { Authorization: `Bearer ${accessToken}` } },
+		);
+		if (!listResponse.ok) throw new Error(`Gmail API error: ${await listResponse.text()}`);
+
+		const listData = await listResponse.json();
+		const messages = listData.messages || [];
+		let newEmailsCount = 0;
+
+		for (const message of messages) {
+			const existing = await ctx.runQuery(internal.google.checkEmailExists, {
+				gmailMessageId: message.id,
+			});
+			if (existing) continue;
+
+			const messageResponse = await fetch(
+				`https://gmail.googleapis.com/gmail/v1/users/me/messages/${message.id}?format=full`,
+				{ headers: { Authorization: `Bearer ${accessToken}` } },
+			);
+			if (!messageResponse.ok) continue;
+
+			const messageData = await messageResponse.json();
+			const headers = messageData.payload.headers;
+			const subject = headers.find((h: any) => h.name === "Subject")?.value || "(No Subject)";
+			const from = headers.find((h: any) => h.name === "From")?.value || "";
+			const toHeader = headers.find((h: any) => h.name === "To")?.value || "";
+			const to = toHeader.split(",").map((email: string) => email.trim());
+
+			let body = messageData.snippet || "";
+			if (messageData.payload.parts) {
+				const textPart = messageData.payload.parts.find((part: any) => part.mimeType === "text/plain");
+				if (textPart?.body?.data) {
+					body = atob(textPart.body.data.replace(/-/g, "+").replace(/_/g, "/"));
+				}
+			} else if (messageData.payload.body?.data) {
+				body = atob(messageData.payload.body.data.replace(/-/g, "+").replace(/_/g, "/"));
+			}
+
+			const labels = messageData.labelIds || [];
+			const receivedAt = Number.parseInt(messageData.internalDate, 10);
+			const triageStatus = await triageEmailWithClaude(subject, from, body);
+
+			await ctx.runMutation(internal.google.insertEmail, {
+				userId: connection.userId,
+				accountEmail: connection.email,
+				gmailMessageId: message.id,
+				subject, from, to, body,
+				threadId: messageData.threadId,
+				labels, triageStatus, receivedAt,
+			});
+
+			// Extract person
+			const senderName = from.split("<")[0].trim().replace(/"/g, "");
+			const senderEmailMatch = from.match(/<(.+?)>/);
+			const senderEmail = senderEmailMatch ? senderEmailMatch[1] : from;
+			if (senderName && senderEmail) {
+				try {
+					await ctx.runMutation(internal.people.extractPerson, {
+						userId: connection.userId,
+						name: senderName,
+						email: senderEmail.toLowerCase(),
+						source: "email",
+						sourceDetail: subject,
+					});
+				} catch (e) {
+					console.error("Person extraction error:", e);
+				}
+				// Real-time profile
+				try {
+					ctx.scheduler.runAfter(0, internal.profileBuilder.profileNewContact, {
+						userId: connection.userId,
+						name: senderName,
+						email: senderEmail.toLowerCase(),
+						source: "email",
+						context: `Subject: ${subject}\n${body.slice(0, 200)}`,
+					});
+				} catch (e) {
+					console.error("Profile scheduling error:", e);
+				}
+			}
+			newEmailsCount++;
+		}
+
+		await ctx.runMutation(internal.google.updateLastSync, { connectionId: args.connectionId });
+		return { newEmails: newEmailsCount };
+	},
+});
+
+export const syncCalendarInternal = internalAction({
+	args: { connectionId: v.id("google_connections") },
+	handler: async (ctx, args): Promise<{ newEvents: number }> => {
+		const accessToken = await refreshTokenIfNeeded(ctx, args.connectionId);
+		const connection = await ctx.runQuery(internal.google.getConnection, {
+			connectionId: args.connectionId,
+		});
+		if (!connection) throw new Error("Connection not found");
+
+		const now = new Date();
+		const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+		const eventsResponse = await fetch(
+			`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${now.toISOString()}&timeMax=${sevenDaysLater.toISOString()}&singleEvents=true&orderBy=startTime`,
+			{ headers: { Authorization: `Bearer ${accessToken}` } },
+		);
+		if (!eventsResponse.ok) throw new Error(`Calendar API error: ${await eventsResponse.text()}`);
+
+		const eventsData = await eventsResponse.json();
+		const events = eventsData.items || [];
+		let newEventsCount = 0;
+
+		for (const event of events) {
+			const existing = await ctx.runQuery(internal.google.checkEventExists, {
+				googleEventId: event.id,
+			});
+
+			const eventAttendees: string[] = event.attendees?.map((a: any) => a.email) || [];
+
+			if (existing) {
+				await ctx.runMutation(internal.google.updateCalendarEvent, {
+					eventId: existing._id,
+					title: event.summary || "(No Title)",
+					description: event.description,
+					startTime: new Date(event.start.dateTime || event.start.date).getTime(),
+					endTime: new Date(event.end.dateTime || event.end.date).getTime(),
+					location: event.location,
+					attendees: eventAttendees,
+				});
+				continue;
+			}
+
+			await ctx.runMutation(internal.google.insertCalendarEvent, {
+				userId: connection.userId,
+				accountEmail: connection.email,
+				googleEventId: event.id,
+				title: event.summary || "(No Title)",
+				description: event.description,
+				startTime: new Date(event.start.dateTime || event.start.date).getTime(),
+				endTime: new Date(event.end.dateTime || event.end.date).getTime(),
+				location: event.location,
+				attendees: eventAttendees,
+			});
+
+			for (const attendee of (event.attendees || [])) {
+				try {
+					await ctx.runMutation(internal.people.extractPerson, {
+						userId: connection.userId,
+						name: attendee.displayName || attendee.email.split("@")[0],
+						email: attendee.email.toLowerCase(),
+						source: "calendar",
+						sourceDetail: event.summary || "(No Title)",
+					});
+				} catch (e) {
+					console.error("Calendar person extraction error:", e);
+				}
+			}
+			newEventsCount++;
+		}
+
+		await ctx.runMutation(internal.google.updateLastSync, { connectionId: args.connectionId });
+		return { newEvents: newEventsCount };
+	},
+});
