@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 import { useQuery, useAction, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 
 type TriageFilter = "all" | "needs_me" | "draft_ready" | "handled" | "ignore";
 
@@ -52,6 +52,7 @@ export default function InboxPage() {
 	const [sendSuccess, setSendSuccess] = useState(false);
 	const [generatingDraft, setGeneratingDraft] = useState(false);
 
+	const router = useRouter();
 	const connections = useQuery(api.google.getGoogleConnections, { userId: "josh" }) ?? [];
 	const emails = useQuery(
 		api.google.getEmails,
@@ -84,6 +85,10 @@ export default function InboxPage() {
 		setReplyText("");
 		setShowReply(false);
 		setSendSuccess(false);
+		// Clear the ?email= param so the useEffect doesn't reopen it
+		if (searchParams.get("email")) {
+			router.replace("/dashboard/inbox", { scroll: false });
+		}
 	}
 
 	async function handleSync() {
