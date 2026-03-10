@@ -386,6 +386,25 @@ export const syncGmailInbox = action({
 				receivedAt,
 			});
 
+			// Extract person from sender
+			const senderName = from.split("<")[0].trim().replace(/"/g, "");
+			const senderEmailMatch = from.match(/<(.+?)>/);
+			const senderEmail = senderEmailMatch ? senderEmailMatch[1] : from;
+			if (senderName && senderEmail) {
+				try {
+					await ctx.runMutation(internal.people.extractPerson, {
+						userId: connection.userId,
+						name: senderName,
+						email: senderEmail.toLowerCase(),
+						source: "email",
+						sourceDetail: subject,
+					});
+				} catch (e) {
+					// Don't fail sync if extraction fails
+					console.error("Person extraction error:", e);
+				}
+			}
+
 			newEmailsCount++;
 		}
 
@@ -506,6 +525,7 @@ export const syncCalendar = action({
 			}
 
 			// Create new event
+			const eventAttendees: string[] = event.attendees?.map((a: any) => a.email) || [];
 			await ctx.runMutation(internal.google.insertCalendarEvent, {
 				userId: connection.userId,
 				accountEmail: connection.email,
@@ -515,8 +535,25 @@ export const syncCalendar = action({
 				startTime: new Date(event.start.dateTime || event.start.date).getTime(),
 				endTime: new Date(event.end.dateTime || event.end.date).getTime(),
 				location: event.location,
-				attendees: event.attendees?.map((a: any) => a.email) || [],
+				attendees: eventAttendees,
 			});
+
+			// Extract people from attendees
+			for (const attendee of (event.attendees || [])) {
+				const attendeeEmail: string = attendee.email;
+				const attendeeName: string = attendee.displayName || attendeeEmail.split("@")[0];
+				try {
+					await ctx.runMutation(internal.people.extractPerson, {
+						userId: connection.userId,
+						name: attendeeName,
+						email: attendeeEmail.toLowerCase(),
+						source: "calendar",
+						sourceDetail: event.summary || "(No Title)",
+					});
+				} catch (e) {
+					console.error("Calendar person extraction error:", e);
+				}
+			}
 
 			newEventsCount++;
 		}

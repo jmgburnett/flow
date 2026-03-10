@@ -112,12 +112,59 @@ export default defineSchema({
 	contacts: defineTable({
 		userId: v.string(),
 		name: v.string(),
+		emails: v.optional(v.array(v.string())),
+		phones: v.optional(v.array(v.string())),
+		type: v.union(
+			v.literal("contact"),
+			v.literal("coworker"),
+			v.literal("team_member"),
+		),
+		company: v.optional(v.string()),
+		role: v.optional(v.string()),
+		avatarUrl: v.optional(v.string()),
+		lastInteraction: v.optional(v.number()),
+		interactionCount: v.optional(v.number()),
+		notes: v.optional(v.string()),
+		sources: v.optional(v.array(v.string())), // e.g. ["email", "calendar", "sms"]
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	}).index("by_user", ["userId"])
+		.index("by_user_and_type", ["userId", "type"])
+		.index("by_user_and_name", ["userId", "name"]),
+
+	// Pending contacts — awaiting user verification before merge or create
+	pending_contacts: defineTable({
+		userId: v.string(),
+		name: v.string(),
 		email: v.optional(v.string()),
 		phone: v.optional(v.string()),
-		lastInteraction: v.optional(v.number()),
-		notes: v.optional(v.string()),
+		source: v.union(
+			v.literal("email"),
+			v.literal("calendar"),
+			v.literal("sms"),
+			v.literal("recording"),
+			v.literal("chat"),
+		),
+		sourceDetail: v.optional(v.string()), // e.g. email subject, event title
+		suggestedType: v.union(
+			v.literal("contact"),
+			v.literal("coworker"),
+			v.literal("team_member"),
+		),
+		// If we think this matches an existing contact
+		matchedContactId: v.optional(v.id("contacts")),
+		matchReason: v.optional(v.string()), // e.g. "Same email", "Similar name"
+		matchConfidence: v.optional(v.number()), // 0-1
+		status: v.union(
+			v.literal("pending"),
+			v.literal("approved"),
+			v.literal("merged"),
+			v.literal("dismissed"),
+		),
+		createdAt: v.number(),
 	}).index("by_user", ["userId"])
-		.index("by_user_and_email", ["userId", "email"]),
+		.index("by_user_and_status", ["userId", "status"])
+		.index("by_email", ["email"]),
 
 	// Chat with Flobot
 	chat_messages: defineTable({
