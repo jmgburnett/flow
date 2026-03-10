@@ -33,7 +33,7 @@ function DashboardContent() {
 
   return (
     <DashboardLayout user={user}>
-      <div className="space-y-4 p-4 max-w-lg mx-auto w-full">
+      <div className="space-y-4 p-4 max-w-2xl mx-auto w-full">
         {/* Quick Stats */}
         <div className="grid grid-cols-3 gap-2">
           <Card className="bg-blue-600 text-white border-0">

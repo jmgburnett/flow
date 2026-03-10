@@ -69,7 +69,7 @@ export default function InboxPage() {
     const triage = TRIAGE_CONFIG[selectedEmail.triageStatus as keyof typeof TRIAGE_CONFIG];
     return (
       <DashboardLayout user={user}>
-        <div className="max-w-lg mx-auto w-full p-4 space-y-4">
+        <div className="max-w-2xl mx-auto w-full p-4 space-y-4">
           <button type="button" onClick={() => setSelectedEmail(null)} className="flex items-center gap-1 text-sm text-muted-foreground">
             <ChevronLeft className="h-4 w-4" /> Back
           </button>
@@ -95,7 +95,7 @@ export default function InboxPage() {
 
   return (
     <DashboardLayout user={user}>
-      <div className="max-w-lg mx-auto w-full p-4 space-y-4">
+      <div className="max-w-2xl mx-auto w-full p-4 space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold">Inbox</h1>
