@@ -115,7 +115,7 @@ export default function PeoplePage() {
 	const pendingContacts = useQuery(api.people.listPending, { userId });
 	const pendingCount = useQuery(api.people.pendingCount, { userId });
 
-	// Load all profiles for enrichment
+	// Load all profiles — these ARE the primary people data
 	const profiles = useQuery(api.profileBuilder.listProfiles, { userId });
 
 	const createContact = useMutation(api.people.create);
@@ -125,43 +125,90 @@ export default function PeoplePage() {
 	const mergePending = useMutation(api.people.mergePending);
 	const dismissPending = useMutation(api.people.dismissPending);
 
-	// Build a lookup map: email → profile
-	const profileMap = new Map<string, any>();
-	if (profiles) {
-		for (const p of profiles) {
-			profileMap.set(p.email.toLowerCase(), p);
-			// Also index by contactId
-			if (p.contactId) profileMap.set(p.contactId, p);
+	// Build a lookup map: email → contact (for linking)
+	const contactMap = new Map<string, any>();
+	if (contacts) {
+		for (const c of contacts) {
+			for (const email of (c.emails || [])) {
+				contactMap.set(email.toLowerCase(), c);
+			}
 		}
 	}
 
-	// Find profile for a contact
-	function getProfile(contact: any) {
-		// Try contactId first
-		if (profileMap.has(contact._id)) return profileMap.get(contact._id);
-		// Then try each email
-		for (const email of (contact.emails || [])) {
-			const p = profileMap.get(email.toLowerCase());
-			if (p) return p;
+	// Merge profiles + contacts into unified people list
+	// Profiles are primary, contacts add type/role/company/notes
+	const mergedPeople = (() => {
+		if (!profiles) return undefined;
+		const seen = new Set<string>();
+		const people: any[] = [];
+
+		// First: all profiles (primary source)
+		for (const profile of profiles) {
+			seen.add(profile.email.toLowerCase());
+			const linkedContact = contactMap.get(profile.email.toLowerCase());
+			people.push({
+				_id: linkedContact?._id || profile._id,
+				isProfile: true,
+				profile,
+				// Use contact data if available, otherwise derive from profile
+				name: linkedContact?.name || profile.name,
+				emails: linkedContact?.emails || [profile.email],
+				phones: linkedContact?.phones || [],
+				type: linkedContact?.type || inferTypeFromEmail(profile.email),
+				company: linkedContact?.company,
+				role: linkedContact?.role,
+				notes: linkedContact?.notes,
+				sources: profile.sources,
+				lastInteraction: profile.lastInteractionDate || linkedContact?.lastInteraction,
+				interactionCount: (profile.emailsSent || 0) + (profile.emailsReceived || 0) + (profile.sharedMeetings || 0),
+			});
 		}
-		return null;
+
+		// Then: contacts without profiles
+		if (contacts) {
+			for (const contact of contacts) {
+				const hasProfile = contact.emails?.some((e: string) => seen.has(e.toLowerCase()));
+				if (!hasProfile) {
+					people.push({
+						...contact,
+						isProfile: false,
+						profile: null,
+					});
+				}
+			}
+		}
+
+		return people;
+	})();
+
+	function inferTypeFromEmail(email: string): ContactType {
+		if (email.endsWith("@gloo.us") || email.endsWith("@gloo.tech")) return "coworker";
+		if (email.endsWith("@church.tech") || email.endsWith("@onflourish.com")) return "team_member";
+		return "contact";
 	}
 
-	// Filter contacts by search
-	const filteredContacts = contacts?.filter((c: any) => {
+	// Filter + search
+	const filteredContacts = mergedPeople?.filter((c: any) => {
+		// Type filter
+		if (filter !== "all" && c.type !== filter) return false;
+		// Search
 		if (!searchQuery) return true;
 		const q = searchQuery.toLowerCase();
-		const profile = getProfile(c);
 		return (
-			c.name.toLowerCase().includes(q) ||
+			c.name?.toLowerCase().includes(q) ||
 			c.emails?.some((e: string) => e.toLowerCase().includes(q)) ||
 			c.phones?.some((p: string) => p.includes(q)) ||
 			c.company?.toLowerCase().includes(q) ||
 			c.role?.toLowerCase().includes(q) ||
-			profile?.relationshipSummary?.toLowerCase().includes(q) ||
-			profile?.topics?.some((t: string) => t.toLowerCase().includes(q))
+			c.profile?.relationshipSummary?.toLowerCase().includes(q) ||
+			c.profile?.topics?.some((t: string) => t.toLowerCase().includes(q))
 		);
-	});
+	})?.sort((a: any, b: any) => (b.interactionCount || 0) - (a.interactionCount || 0));
+
+	// Helper to get profile from merged person
+	function getProfile(person: any) {
+		return person.profile || null;
+	}
 
 	function openCreate() {
 		setFormName(""); setFormEmails(""); setFormPhones(""); setFormType("contact");
