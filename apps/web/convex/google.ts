@@ -709,6 +709,17 @@ export const markEmailHandled = internalMutation({
 	},
 });
 
+// Internal: get user's style profile
+export const getStyleProfile = internalQuery({
+	args: { userId: v.string() },
+	handler: async (ctx, args) => {
+		return await ctx.db
+			.query("style_profiles")
+			.withIndex("by_user", (q) => q.eq("userId", args.userId))
+			.first();
+	},
+});
+
 // Generate AI draft reply for an email
 export const generateDraftReply = action({
 	args: {
@@ -725,6 +736,24 @@ export const generateDraftReply = action({
 			throw new Error("ANTHROPIC_API_KEY not configured");
 		}
 
+		// Try to load dynamic style profile
+		const styleProfile = await ctx.runQuery(internal.google.getStyleProfile, {
+			userId: email.userId,
+		});
+
+		let stylePrompt: string;
+		if (styleProfile?.prompt) {
+			stylePrompt = styleProfile.prompt;
+		} else {
+			// Fallback to hardcoded style
+			stylePrompt = `Write as Josh Burnett (Head of AI Product at Gloo, founder of Church.tech).
+Warm and relational, never corporate-robotic. Opens with "Hi [Name]," or "Hey [Name]," (first name, casual).
+Signs off with "Grateful,\\n\\nJosh" (his signature sign-off) or just "Josh" for quick replies.
+Direct but kind — states positions clearly, asks specific questions.
+If apologizing: "I apologize for the delay" or "I dropped the ball". Uses "Would love to connect" / "Looking forward to..." naturally.
+No emojis, no corporate jargon, no "Best regards". Match length to content. Writes like talking to a friend he respects.`;
+		}
+
 		const resp = await fetch("https://api.anthropic.com/v1/messages", {
 			method: "POST",
 			headers: {
@@ -738,19 +767,7 @@ export const generateDraftReply = action({
 				messages: [
 					{
 						role: "user",
-						content: `You are drafting an email reply as Josh Burnett (Head of AI Product at Gloo, founder of Church.tech).
-
-JOSH'S WRITING STYLE:
-- Warm and relational, never corporate-robotic
-- Opens with "Hi [Name]," or "Hey [Name]," (first name, casual)
-- Signs off with "Grateful,\n\nJosh" (his signature sign-off) or just "Josh" for quick replies
-- Direct but kind — states positions clearly, asks specific questions
-- If apologizing, he's genuine: "I apologize for the delay" or "I dropped the ball"
-- Uses "Would love to connect" / "Looking forward to..." naturally
-- If scheduling, offers specific availability windows
-- No emojis, no corporate jargon, no "Best regards"
-- Match length to what's needed — short replies stay short, detailed topics get detail
-- Writes like talking to a friend he respects
+						content: `${stylePrompt}
 
 Output ONLY the email body. No subject line, no signature block.
 
@@ -759,7 +776,7 @@ From: ${email.from}
 Subject: ${email.subject}
 Body: ${email.body.slice(0, 2000)}
 
-Draft a reply in Josh's voice:`,
+Draft a reply:`,
 					},
 				],
 			}),
