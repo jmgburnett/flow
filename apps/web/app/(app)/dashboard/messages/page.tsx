@@ -57,7 +57,7 @@ export default function MessagesPage() {
 	const sendSMS = useAction(api.sms.sendSMS);
 	const markRead = useMutation(api.sms.markRead);
 
-	const selectedConvo = conversations?.find((c) => c.phoneNumber === selectedPhone);
+	const selectedConvo = conversations?.find((c: any) => c.phoneNumber === selectedPhone);
 
 	// Scroll to bottom when messages change
 	useEffect(() => {
@@ -142,7 +142,7 @@ export default function MessagesPage() {
 								<p className="text-sm text-muted-foreground">No messages yet</p>
 							</div>
 						)}
-						{conversations?.map((convo) => (
+						{conversations?.map((convo: any) => (
 							<button
 								type="button"
 								key={convo._id}
@@ -216,7 +216,7 @@ export default function MessagesPage() {
 
 						{/* Messages */}
 						<div className="flex-1 overflow-auto px-4 py-4 space-y-2">
-							{messages?.map((msg, i) => {
+							{messages?.map((msg: any, i: number) => {
 								const isOut = msg.direction === "outbound";
 								const prevMsg = messages[i - 1];
 								const showTime = !prevMsg || msg.timestamp - prevMsg.timestamp > 300000;
