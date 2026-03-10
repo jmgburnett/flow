@@ -149,6 +149,21 @@ export const insertMessage = internalMutation({
 		await ctx.db.insert("slack_messages", {
 			...args,
 		});
+
+		// Schedule real-time profile building for new Slack contacts
+		// Only for DMs (not channel messages from yourself)
+		if (args.channelType === "dm" && args.senderName) {
+			try {
+				await ctx.scheduler.runAfter(0, internal.profileBuilder.profileNewContact, {
+					userId: args.userId,
+					name: args.senderName,
+					source: "slack" as const,
+					context: `Slack DM: ${args.text.slice(0, 200)}`,
+				});
+			} catch (e) {
+				console.error("Slack profile scheduling error:", e);
+			}
+		}
 	},
 });
 

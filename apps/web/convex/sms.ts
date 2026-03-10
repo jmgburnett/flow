@@ -197,6 +197,19 @@ export const receiveMessage = mutation({
 				lastMessageAt: timestamp,
 				unreadCount: 1,
 			});
+
+			// New SMS contact — schedule real-time profile building
+			try {
+				await ctx.scheduler.runAfter(0, internal.profileBuilder.profileNewContact, {
+					userId: args.userId,
+					name: args.contactName || contactPhone,
+					phone: contactPhone,
+					source: "sms" as const,
+					context: args.body.slice(0, 200),
+				});
+			} catch (e) {
+				console.error("SMS profile scheduling error:", e);
+			}
 		}
 	},
 });

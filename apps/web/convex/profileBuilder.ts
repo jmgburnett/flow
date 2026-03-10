@@ -1082,6 +1082,253 @@ export const enrichFromInboundEmails = action({
 });
 
 // ═══════════════════════════════════════════════
+// REAL-TIME PROFILE — triggered on new inbound contact
+// ═══════════════════════════════════════════════
+
+// Check if a profile already exists (internal)
+export const profileExists = internalQuery({
+	args: { userId: v.string(), email: v.optional(v.string()), phone: v.optional(v.string()) },
+	handler: async (ctx, args) => {
+		if (args.email) {
+			const p = await ctx.db
+				.query("contact_profiles")
+				.withIndex("by_user_and_email", (q) =>
+					q.eq("userId", args.userId).eq("email", args.email!.toLowerCase()),
+				)
+				.first();
+			if (p) return true;
+		}
+		// For phone-only contacts, search all profiles (no phone index yet)
+		if (args.phone && !args.email) {
+			// Phone-only profiles are rare, skip for now
+			return false;
+		}
+		return false;
+	},
+});
+
+// Real-time: profile a new inbound contact
+// Called from email sync, SMS receive, Slack message sync
+export const profileNewContact = action({
+	args: {
+		userId: v.string(),
+		name: v.string(),
+		email: v.optional(v.string()),
+		phone: v.optional(v.string()),
+		source: v.union(
+			v.literal("email"),
+			v.literal("sms"),
+			v.literal("slack"),
+			v.literal("calendar"),
+		),
+		context: v.optional(v.string()), // e.g. email subject, SMS body snippet
+	},
+	handler: async (ctx, args) => {
+		const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+		if (!ANTHROPIC_API_KEY) return { skipped: true, reason: "no_api_key" };
+
+		// 1. Skip if profile already exists
+		const exists = await ctx.runQuery(internal.profileBuilder.profileExists, {
+			userId: args.userId,
+			email: args.email,
+			phone: args.phone,
+		});
+		if (exists) return { skipped: true, reason: "profile_exists" };
+
+		// 2. Skip own emails
+		if (args.email && OWN_EMAILS.includes(args.email.toLowerCase())) {
+			return { skipped: true, reason: "own_email" };
+		}
+
+		// 3. Filter check — is this a real person?
+		const email = args.email?.toLowerCase() || "";
+
+		// Auto-filter obvious junk
+		if (email) {
+			const junkCheck = isObviouslyJunk(email);
+			if (junkCheck.junk) {
+				return { skipped: true, reason: `junk: ${junkCheck.reason}` };
+			}
+		}
+
+		// AI filter for ambiguous contacts
+		try {
+			const filterResp = await fetch("https://api.anthropic.com/v1/messages", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"x-api-key": ANTHROPIC_API_KEY,
+					"anthropic-version": "2023-06-01",
+				},
+				body: JSON.stringify({
+					model: "claude-3-haiku-20240307",
+					max_tokens: 100,
+					messages: [{
+						role: "user",
+						content: `Is this a real person or a marketing/automated/newsletter sender?
+Name: "${args.name}"
+Email: ${email || "N/A"}
+Phone: ${args.phone || "N/A"}
+Source: ${args.source}
+Context: ${args.context?.slice(0, 200) || "N/A"}
+
+Reply with ONLY "real" or "junk" followed by a brief reason.`,
+					}],
+				}),
+			});
+
+			if (filterResp.ok) {
+				const filterData: { content: Array<{ text: string }> } = await filterResp.json();
+				const verdict = filterData.content[0].text.trim().toLowerCase();
+				if (verdict.startsWith("junk")) {
+					return { skipped: true, reason: `ai_filtered: ${verdict}` };
+				}
+			}
+		} catch {
+			// If filter fails, proceed anyway (better to profile than miss someone)
+		}
+
+		// 4. Build profile
+		// For email contacts, check if we have any sent emails to them in the DB
+		let profileContext = args.context || "";
+		if (email) {
+			// Check sent emails from all accounts
+			const connections = await ctx.runQuery(internal.profileBuilder.getAllConnections, {
+				userId: args.userId,
+			});
+
+			// Fetch a few sent emails to this person if we can
+			for (const conn of connections) {
+				try {
+					const accessToken = await refreshToken(ctx, conn._id);
+					const searchResp = await fetch(
+						`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=5&q=to:${email}+in:sent`,
+						{ headers: { Authorization: `Bearer ${accessToken}` } },
+					);
+					if (!searchResp.ok) continue;
+					const searchData = await searchResp.json();
+					const messages = searchData.messages || [];
+
+					for (const msg of messages.slice(0, 3)) {
+						const msgResp = await fetch(
+							`https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject`,
+							{ headers: { Authorization: `Bearer ${accessToken}` } },
+						);
+						if (!msgResp.ok) continue;
+						const msgData = await msgResp.json();
+						const subject = msgData.payload?.headers?.find((h: any) => h.name === "Subject")?.value || "";
+						if (subject) profileContext += `\nPrevious email subject: ${subject}`;
+					}
+					break; // Got some context, no need to check other accounts
+				} catch {
+					continue;
+				}
+			}
+		}
+
+		// Check calendar for shared meetings
+		const events = await ctx.runQuery(internal.profileBuilder.getAllCalendarEvents, {
+			userId: args.userId,
+		});
+		const sharedMeetings = email
+			? events.filter((e) => e.attendees?.some((a) => a.toLowerCase() === email))
+			: [];
+		if (sharedMeetings.length > 0) {
+			profileContext += `\nShared meetings: ${sharedMeetings.map((e) => e.title).join(", ")}`;
+		}
+
+		// Generate profile with Claude
+		try {
+			const resp = await fetch("https://api.anthropic.com/v1/messages", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"x-api-key": ANTHROPIC_API_KEY,
+					"anthropic-version": "2023-06-01",
+				},
+				body: JSON.stringify({
+					model: "claude-3-haiku-20240307",
+					max_tokens: 600,
+					messages: [{
+						role: "user",
+						content: `Build a contact profile for someone who just contacted Josh Burnett (Head of AI Product at Gloo, founder of Church.tech).
+
+Name: ${args.name}
+Email: ${email || "N/A"}
+Phone: ${args.phone || "N/A"}
+Source: ${args.source}
+Available context: ${profileContext.slice(0, 500) || "First contact, no prior history"}
+
+Return JSON:
+{
+  "relationshipSummary": "Brief description based on available info (1-2 sentences)",
+  "topics": ["inferred", "topics"],
+  "communicationStyle": "Unknown — new contact" or inferred from context,
+  "sentiment": "professional" or inferred,
+  "keyContext": "What an AI should know when drafting responses to this person"
+}
+
+JSON only:`,
+					}],
+				}),
+			});
+
+			if (!resp.ok) {
+				console.error(`Claude profile error: ${await resp.text()}`);
+				return { skipped: true, reason: "claude_error" };
+			}
+
+			const respData: { content: Array<{ text: string }> } = await resp.json();
+			let profileJson;
+			try {
+				let text = respData.content[0].text.trim();
+				if (text.startsWith("```")) {
+					text = text.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
+				}
+				profileJson = JSON.parse(text);
+			} catch {
+				return { skipped: true, reason: "parse_error" };
+			}
+
+			// Find matching contact record
+			const contact = email
+				? await ctx.runQuery(internal.profileBuilder.findContactByEmail, {
+					userId: args.userId,
+					email,
+				})
+				: null;
+
+			// Upsert profile
+			await ctx.runMutation(internal.profileBuilder.upsertProfile, {
+				userId: args.userId,
+				contactId: contact?._id,
+				email: email || args.phone || args.name.toLowerCase().replace(/\s+/g, "."),
+				name: args.name,
+				relationshipSummary: profileJson.relationshipSummary || "",
+				topics: profileJson.topics || [],
+				communicationStyle: profileJson.communicationStyle || "Unknown — new contact",
+				sentiment: profileJson.sentiment || "professional",
+				keyContext: profileJson.keyContext || "",
+				recentInteractions: [{
+					date: Date.now(),
+					type: `${args.source}_received`,
+					summary: args.context?.slice(0, 100) || `First ${args.source} contact`,
+				}],
+				emailsSent: 0,
+				emailsReceived: args.source === "email" ? 1 : 0,
+				lastInteractionDate: Date.now(),
+				sources: [args.source],
+			});
+
+			return { created: true, name: args.name, email: email || args.phone };
+		} catch (e) {
+			console.error("Profile creation error:", e);
+			return { skipped: true, reason: `error: ${String(e).slice(0, 100)}` };
+		}
+	},
+});
+
+// ═══════════════════════════════════════════════
 // FULL ENRICHMENT PIPELINE
 // ═══════════════════════════════════════════════
 // Note: Convex actions can't call other actions.

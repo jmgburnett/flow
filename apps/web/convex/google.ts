@@ -403,6 +403,19 @@ export const syncGmailInbox = action({
 					// Don't fail sync if extraction fails
 					console.error("Person extraction error:", e);
 				}
+
+				// Schedule real-time profile building (filter + profile in one shot)
+				try {
+					await ctx.scheduler.runAfter(0, internal.profileBuilder.profileNewContact, {
+						userId: connection.userId,
+						name: senderName,
+						email: senderEmail.toLowerCase(),
+						source: "email",
+						context: `Subject: ${subject}\n${body.slice(0, 200)}`,
+					});
+				} catch (e) {
+					console.error("Real-time profile scheduling error:", e);
+				}
 			}
 
 			newEmailsCount++;
