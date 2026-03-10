@@ -53,7 +53,7 @@ interface Memory {
 
 const CATEGORIES: { value: Category | "all"; label: string; color: string }[] = [
 	{ value: "all", label: "All", color: "bg-slate-600" },
-	{ value: "personal", label: "Personal", color: "bg-blue-600" },
+	{ value: "personal", label: "Personal", color: "bg-primary" },
 	{ value: "project", label: "Project", color: "bg-green-600" },
 	{ value: "meeting", label: "Meeting", color: "bg-purple-600" },
 	{ value: "idea", label: "Idea", color: "bg-yellow-600" },
@@ -196,7 +196,7 @@ export default function MemoryPage() {
 				{/* Header */}
 				<div className="flex items-center justify-between">
 					<div className="flex items-center gap-2">
-						<Brain className="h-6 w-6 text-blue-400" />
+						<Brain className="h-6 w-6 text-primary/80" />
 						<h1 className="text-xl font-bold">Memory</h1>
 					</div>
 					<Button size="sm" onClick={openCreate} className="gap-1">
@@ -235,7 +235,7 @@ export default function MemoryPage() {
 							className={cn(
 								"px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all",
 								selectedCategory === cat.value
-									? "bg-blue-600 text-white"
+									? "bg-primary text-white"
 									: "bg-muted text-muted-foreground hover:bg-muted/80",
 							)}
 						>
@@ -280,7 +280,7 @@ export default function MemoryPage() {
 													{memory.title}
 												</h3>
 												{memory.pinned && (
-													<Pin className="h-3 w-3 text-blue-400 shrink-0 fill-blue-400" />
+													<Pin className="h-3 w-3 text-primary/80 shrink-0 fill-primary/80" />
 												)}
 											</div>
 											<p className="text-xs text-muted-foreground line-clamp-2 mb-2">
@@ -321,7 +321,7 @@ export default function MemoryPage() {
 											className="p-1.5 rounded-md hover:bg-muted transition-colors shrink-0"
 										>
 											{memory.pinned ? (
-												<PinOff className="h-4 w-4 text-blue-400" />
+												<PinOff className="h-4 w-4 text-primary/80" />
 											) : (
 												<Pin className="h-4 w-4 text-muted-foreground" />
 											)}
@@ -339,7 +339,7 @@ export default function MemoryPage() {
 				<DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
 					<DialogHeader>
 						<DialogTitle className="flex items-center gap-2">
-							<Brain className="h-5 w-5 text-blue-400" />
+							<Brain className="h-5 w-5 text-primary/80" />
 							{isCreating ? "New Memory" : "Edit Memory"}
 						</DialogTitle>
 					</DialogHeader>

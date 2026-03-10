@@ -46,7 +46,7 @@ type ContactType = "contact" | "coworker" | "team_member";
 type FilterType = "all" | ContactType;
 
 const TYPE_CONFIG = {
-	contact: { label: "Contact", color: "bg-blue-600", icon: "👤" },
+	contact: { label: "Contact", color: "bg-primary", icon: "👤" },
 	coworker: { label: "Coworker", color: "bg-green-600", icon: "🏢" },
 	team_member: { label: "Team", color: "bg-purple-600", icon: "⭐" },
 } as const;

@@ -1,106 +1,145 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,200;0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,200;1,9..40,300;1,9..40,400&family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700&display=swap');
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
-	/* Apple-inspired glass design system */
-	--background: oklch(0.9750 0.0040 260);
-	--foreground: oklch(0.1400 0.0050 260);
-	--card: oklch(1.0000 0 0 / 0.72);
-	--card-foreground: oklch(0.1400 0.0050 260);
-	--popover: oklch(1.0000 0 0 / 0.85);
-	--popover-foreground: oklch(0.1400 0.0050 260);
-	--primary: oklch(0.5500 0.1900 260);
-	--primary-foreground: oklch(1.0000 0 0);
-	--secondary: oklch(0.9400 0.0060 260 / 0.60);
-	--secondary-foreground: oklch(0.2500 0.0050 260);
-	--muted: oklch(0.9300 0.0050 260 / 0.50);
-	--muted-foreground: oklch(0.4500 0.0100 260);
-	--accent: oklch(0.9500 0.0040 260 / 0.50);
-	--accent-foreground: oklch(0.2000 0.0050 260);
-	--destructive: oklch(0.5500 0.2200 25);
-	--destructive-foreground: oklch(1.0000 0 0);
-	--border: oklch(0.8800 0.0060 260 / 0.40);
-	--input: oklch(0.9200 0.0050 260 / 0.50);
-	--ring: oklch(0.5500 0.1900 260);
-	--radius: 0.875rem;
+	/* ═══════════════════════════════════════════════
+	   Cypress Design System — Gloo Foundations
+	   Source: Figma 🟡 Cypress: Foundations
+	   Fonts: F37 Jan (→ Plus Jakarta Sans) + F37 Zagma (→ DM Sans)
+	   ═══════════════════════════════════════════════ */
 
-	/* Glass tokens */
-	--glass-bg: oklch(1.0000 0 0 / 0.55);
-	--glass-bg-heavy: oklch(1.0000 0 0 / 0.75);
-	--glass-border: oklch(1.0000 0 0 / 0.30);
-	--glass-blur: 20px;
+	/* Core surfaces — warm earth tones */
+	--background: #eeedeb;
+	--foreground: #151313;
+	--card: #fafaf9;
+	--card-foreground: #151313;
+	--popover: #fafaf9;
+	--popover-foreground: #151313;
+
+	/* Primary — Cypress teal */
+	--primary: #08a39e;
+	--primary-foreground: #fafaf9;
+
+	/* Secondary — warm muted */
+	--secondary: #f0ede3;
+	--secondary-foreground: #2a2a28;
+
+	/* Muted — subtle warm gray */
+	--muted: #e5e4e0;
+	--muted-foreground: #42423c;
+
+	/* Accent — light warm */
+	--accent: #f0ede3;
+	--accent-foreground: #1b1a18;
+
+	/* Destructive */
+	--destructive: #dc2626;
+	--destructive-foreground: #fafaf9;
+
+	/* Borders & inputs */
+	--border: #e5e4e0;
+	--input: #e5e4e0;
+	--ring: #08a39e;
+
+	/* Radius — Cypress uses rounded-xl (12px) */
+	--radius: 0.75rem;
+
+	/* Cypress glass tokens */
+	--glass-bg: rgba(250, 250, 249, 0.55);
+	--glass-bg-heavy: rgba(250, 250, 249, 0.78);
+	--glass-border: rgba(229, 228, 224, 0.50);
+	--glass-blur: 16px;
 	--glass-blur-heavy: 40px;
 
-	--chart-1: oklch(0.5500 0.1900 260);
-	--chart-2: oklch(0.6500 0.1500 330);
-	--chart-3: oklch(0.7000 0.1600 145);
-	--chart-4: oklch(0.7500 0.1200 60);
-	--chart-5: oklch(0.6000 0.1400 30);
-	--sidebar: oklch(0.9700 0.0040 260 / 0.60);
-	--sidebar-foreground: oklch(0.1400 0.0050 260);
-	--sidebar-primary: oklch(0.5500 0.1900 260);
-	--sidebar-primary-foreground: oklch(1.0000 0 0);
-	--sidebar-accent: oklch(1.0000 0 0 / 0.50);
-	--sidebar-accent-foreground: oklch(0.1400 0.0050 260);
-	--sidebar-border: oklch(0.8800 0.0060 260 / 0.30);
-	--sidebar-ring: oklch(0.5500 0.1900 260);
-	--font-sans: -apple-system, "SF Pro Display", "SF Pro Text", "Inter", system-ui, sans-serif;
-	--font-serif: "New York", "Playfair Display", Georgia, serif;
-	--font-mono: "SF Mono", "JetBrains Mono", ui-monospace, monospace;
-	--shadow-color: #000000;
-	--shadow-opacity: 0.04;
-	--shadow-blur: 10px;
-	--shadow-spread: 0px;
-	--shadow-offset-x: 0px;
-	--shadow-offset-y: 2px;
-	--letter-spacing: -0.01em;
+	/* Chart colors — Cypress palette */
+	--chart-1: #08a39e;
+	--chart-2: #003642;
+	--chart-3: #059961;
+	--chart-4: #f9d65d;
+	--chart-5: #0d99c0;
+
+	/* Sidebar — frosted warm */
+	--sidebar: rgba(250, 250, 249, 0.60);
+	--sidebar-foreground: #151313;
+	--sidebar-primary: #08a39e;
+	--sidebar-primary-foreground: #fafaf9;
+	--sidebar-accent: rgba(240, 237, 227, 0.50);
+	--sidebar-accent-foreground: #1b1a18;
+	--sidebar-border: rgba(229, 228, 224, 0.40);
+	--sidebar-ring: #08a39e;
+
+	/* Typography — F37 Jan → Plus Jakarta Sans, F37 Zagma → DM Sans */
+	--font-sans: "DM Sans", -apple-system, system-ui, sans-serif;
+	--font-display: "Plus Jakarta Sans", "DM Sans", -apple-system, sans-serif;
+	--font-serif: Georgia, "Times New Roman", serif;
+	--font-mono: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+
+	/* Cypress shadows — 4 elevation levels */
+	--shadow-color: 21, 21, 19;
+	--shadow-2xs: 0 0.5px 1px rgba(var(--shadow-color), 0.02);
+	--shadow-xs: 0 1px 2px rgba(var(--shadow-color), 0.04);
+	--shadow-sm: 0 2px 2px rgba(var(--shadow-color), 0.04), 0 4px 8px -1px rgba(var(--shadow-color), 0.04);
+	--shadow: 0 4px 16px rgba(var(--shadow-color), 0.04), 0 8px 20px -4px rgba(var(--shadow-color), 0.04);
+	--shadow-md: 16px 16px 18px -8px rgba(var(--shadow-color), 0.08), -16px 4px 18px -8px rgba(var(--shadow-color), 0.08);
+	--shadow-lg: 40px 40px 80px rgba(var(--shadow-color), 0.08), 10px 5px 20px rgba(var(--shadow-color), 0.08), -20px 5px 40px rgba(var(--shadow-color), 0.08);
+	--shadow-xl: 0 0 80px rgba(204, 216, 255, 1.0), 0 0 40px rgba(var(--shadow-color), 0.04);
+	--shadow-2xl: 40px 40px 80px rgba(var(--shadow-color), 0.12), 10px 5px 20px rgba(var(--shadow-color), 0.08);
+
+	/* Spacing — 8px baseline grid */
 	--spacing: 0.25rem;
-	--shadow-2xs: 0 0.5px 1px hsl(0 0% 0% / 0.02);
-	--shadow-xs: 0 1px 2px hsl(0 0% 0% / 0.04);
-	--shadow-sm: 0 1px 3px hsl(0 0% 0% / 0.06), 0 1px 2px hsl(0 0% 0% / 0.04);
-	--shadow: 0 2px 8px hsl(0 0% 0% / 0.06), 0 1px 2px hsl(0 0% 0% / 0.03);
-	--shadow-md: 0 4px 16px hsl(0 0% 0% / 0.06), 0 2px 4px hsl(0 0% 0% / 0.03);
-	--shadow-lg: 0 8px 32px hsl(0 0% 0% / 0.08), 0 4px 8px hsl(0 0% 0% / 0.03);
-	--shadow-xl: 0 16px 48px hsl(0 0% 0% / 0.10), 0 4px 8px hsl(0 0% 0% / 0.03);
-	--shadow-2xl: 0 24px 64px hsl(0 0% 0% / 0.14);
+
+	/* Letter spacing — Cypress uses tight tracking */
+	--letter-spacing: -0.01em;
 	--tracking-normal: -0.01em;
+
+	/* Cypress accent colors for special use */
+	--cypress-teal: #08a39e;
+	--cypress-dark-teal: #003642;
+	--cypress-gold: #f9d65d;
+	--cypress-cyan: #0d99c0;
+	--cypress-bright-cyan: #1bd4ed;
+	--cypress-green: #059961;
+	--cypress-glow: #7089ff;
+	--cypress-cream: #f0ede3;
+	--cypress-warm-black: #2a2a28;
+	--cypress-page: #fafaf9;
 }
 
 .dark {
-	--background: oklch(0.1200 0.0060 260);
-	--foreground: oklch(0.9500 0.0040 260);
-	--card: oklch(0.1800 0.0060 260 / 0.72);
-	--card-foreground: oklch(0.9500 0.0040 260);
-	--popover: oklch(0.1800 0.0060 260 / 0.85);
-	--popover-foreground: oklch(0.9500 0.0040 260);
-	--primary: oklch(0.6500 0.1900 260);
-	--primary-foreground: oklch(1.0000 0 0);
-	--secondary: oklch(0.2200 0.0060 260 / 0.60);
-	--secondary-foreground: oklch(0.9000 0.0040 260);
-	--muted: oklch(0.2200 0.0060 260 / 0.50);
-	--muted-foreground: oklch(0.5500 0.0080 260);
-	--accent: oklch(0.2500 0.0060 260 / 0.50);
-	--accent-foreground: oklch(0.9000 0.0040 260);
-	--destructive: oklch(0.6000 0.2200 25);
-	--destructive-foreground: oklch(1.0000 0 0);
-	--border: oklch(0.3000 0.0060 260 / 0.40);
-	--input: oklch(0.2500 0.0060 260 / 0.50);
-	--ring: oklch(0.6500 0.1900 260);
-	--radius: 0.875rem;
-	--sidebar: oklch(0.1500 0.0060 260 / 0.60);
-	--sidebar-foreground: oklch(0.9500 0.0040 260);
-	--sidebar-primary: oklch(0.6500 0.1900 260);
-	--sidebar-primary-foreground: oklch(1.0000 0 0);
-	--sidebar-accent: oklch(0.2500 0.0060 260 / 0.50);
-	--sidebar-accent-foreground: oklch(0.9500 0.0040 260);
-	--sidebar-border: oklch(0.3000 0.0060 260 / 0.30);
-	--sidebar-ring: oklch(0.6500 0.1900 260);
-	--glass-bg: oklch(0.1800 0.0060 260 / 0.55);
-	--glass-bg-heavy: oklch(0.1800 0.0060 260 / 0.75);
-	--glass-border: oklch(0.3000 0.0060 260 / 0.30);
+	--background: #1b1a18;
+	--foreground: #eeedeb;
+	--card: rgba(42, 42, 40, 0.72);
+	--card-foreground: #eeedeb;
+	--popover: rgba(42, 42, 40, 0.85);
+	--popover-foreground: #eeedeb;
+	--primary: #1bd4ed;
+	--primary-foreground: #151313;
+	--secondary: rgba(42, 42, 40, 0.60);
+	--secondary-foreground: #e5e4e0;
+	--muted: rgba(42, 42, 40, 0.50);
+	--muted-foreground: #737373;
+	--accent: rgba(42, 42, 40, 0.50);
+	--accent-foreground: #eeedeb;
+	--destructive: #ef4444;
+	--destructive-foreground: #fafaf9;
+	--border: rgba(66, 66, 60, 0.40);
+	--input: rgba(66, 66, 60, 0.50);
+	--ring: #1bd4ed;
+	--sidebar: rgba(27, 26, 24, 0.60);
+	--sidebar-foreground: #eeedeb;
+	--sidebar-primary: #1bd4ed;
+	--sidebar-primary-foreground: #151313;
+	--sidebar-accent: rgba(42, 42, 40, 0.50);
+	--sidebar-accent-foreground: #eeedeb;
+	--sidebar-border: rgba(66, 66, 60, 0.30);
+	--sidebar-ring: #1bd4ed;
+	--glass-bg: rgba(27, 26, 24, 0.55);
+	--glass-bg-heavy: rgba(27, 26, 24, 0.78);
+	--glass-border: rgba(66, 66, 60, 0.30);
 }
 
 @theme inline {
@@ -171,9 +210,13 @@
 	}
 	body {
 		@apply bg-background text-foreground antialiased;
+		font-family: var(--font-sans);
 		letter-spacing: var(--tracking-normal);
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
+	}
+	h1, h2, h3, h4, h5, h6 {
+		font-family: var(--font-display);
 	}
 }
 
@@ -195,6 +238,46 @@
 		backdrop-filter: blur(var(--glass-blur));
 		-webkit-backdrop-filter: blur(var(--glass-blur));
 		border: 1px solid var(--glass-border);
+	}
+	/* Cypress elevation levels */
+	.elevation-1 {
+		backdrop-filter: blur(12px);
+		-webkit-backdrop-filter: blur(12px);
+		box-shadow: 0 4px 8px -1px rgba(21, 21, 19, 0.04), 0 2px 2px rgba(21, 21, 19, 0.04);
+	}
+	.elevation-2 {
+		backdrop-filter: blur(12px);
+		-webkit-backdrop-filter: blur(12px);
+		box-shadow: 0 8px 20px -4px rgba(21, 21, 19, 0.04), 0 4px 16px rgba(21, 21, 19, 0.04);
+	}
+	.elevation-3 {
+		backdrop-filter: blur(12px);
+		-webkit-backdrop-filter: blur(12px);
+		box-shadow: 16px 16px 18px -8px rgba(21, 21, 19, 0.08), -16px 4px 18px -8px rgba(21, 21, 19, 0.08);
+	}
+	.elevation-4 {
+		backdrop-filter: blur(12px);
+		-webkit-backdrop-filter: blur(12px);
+		box-shadow: 40px 40px 80px rgba(21, 21, 19, 0.08), 10px 5px 20px rgba(21, 21, 19, 0.08), -20px 5px 40px rgba(21, 21, 19, 0.08);
+	}
+	/* Cypress material: paper */
+	.paper {
+		background: var(--card);
+		backdrop-filter: blur(12px);
+		-webkit-backdrop-filter: blur(12px);
+		box-shadow: 40px 40px 80px rgba(21, 21, 19, 0.08), 10px 5px 20px rgba(21, 21, 19, 0.08), -20px 5px 40px rgba(21, 21, 19, 0.08);
+		border-radius: var(--radius);
+	}
+	/* Cypress material: glass (with glow) */
+	.cypress-glass {
+		background: var(--glass-bg);
+		backdrop-filter: blur(16px);
+		-webkit-backdrop-filter: blur(16px);
+		box-shadow: 0 0 80px rgba(204, 216, 255, 1.0), 0 0 40px rgba(21, 21, 19, 0.04);
+		border: 1px solid var(--glass-border);
+	}
+	.font-display {
+		font-family: var(--font-display);
 	}
 	.defer-render {
 		content-visibility: auto;

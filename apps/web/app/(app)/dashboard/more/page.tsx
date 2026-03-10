@@ -88,7 +88,7 @@ const menuOptions: MenuOption[] = [
 		href: "/dashboard/settings",
 		icon: LinkIcon,
 		description: "Google & integrations",
-		color: "bg-blue-600",
+		color: "bg-primary",
 	},
 ];
 
@@ -112,7 +112,7 @@ export default function MorePage() {
 							</Avatar>
 							<div>
 								<h2 className="text-xl font-bold">{displayName}</h2>
-								<p className="text-blue-100 text-sm">{user?.email}</p>
+								<p className="text-primary-foreground/80 text-sm">{user?.email}</p>
 							</div>
 						</div>
 					</CardContent>

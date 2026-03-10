@@ -109,7 +109,7 @@ const sourceIcons = {
 
 const priorityColors = {
 	low: "bg-gray-500",
-	medium: "bg-blue-500",
+	medium: "bg-primary",
 	high: "bg-orange-500",
 	urgent: "bg-red-500",
 };
