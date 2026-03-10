@@ -139,8 +139,8 @@ export const analyzeEmailStyle = action({
 		});
 
 		// Get connections
-		let connectionIds = args.connectionIds;
-		if (!connectionIds) {
+		let connectionIds: any[] = args.connectionIds || [];
+		if (connectionIds.length === 0) {
 			const conns = await ctx.runQuery(internal.styleAnalysis.getAllConnections, {
 				userId: args.userId,
 			});

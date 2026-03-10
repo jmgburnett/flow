@@ -734,7 +734,7 @@ function isObviouslyJunk(email: string): { junk: boolean; reason: string } {
 // Filter profiles: auto-filter obvious junk, then use Claude for ambiguous ones
 export const filterProfiles = action({
 	args: { userId: v.string() },
-	handler: async (ctx, args) => {
+	handler: async (ctx, args): Promise<{ total: number; autoFiltered: number; aiFiltered: number; kept: number; deleted: number; filtered: number; message: string }> => {
 		const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 		if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
 
@@ -743,9 +743,9 @@ export const filterProfiles = action({
 		});
 
 		// Only filter profiles that haven't been classified yet
-		const unclassified = profiles.filter((p) => p.isReal === undefined);
+		const unclassified = profiles.filter((p: any) => p.isReal === undefined);
 		if (unclassified.length === 0) {
-			return { filtered: 0, kept: 0, deleted: 0, message: "All profiles already classified" };
+			return { total: 0, autoFiltered: 0, aiFiltered: 0, filtered: 0, kept: 0, deleted: 0, message: "All profiles already classified" };
 		}
 
 		let autoFiltered = 0;
@@ -773,7 +773,7 @@ export const filterProfiles = action({
 		for (let i = 0; i < ambiguous.length; i += 20) {
 			const batch = ambiguous.slice(i, i + 20);
 
-			const profileList = batch.map((p, idx) =>
+			const profileList = batch.map((p: any, idx: number) =>
 				`${idx + 1}. "${p.name}" <${p.email}> — ${p.emailsSent} sent emails. Summary: ${p.relationshipSummary.slice(0, 100)}`
 			).join("\n");
 
@@ -858,6 +858,7 @@ JSON only, no markdown:`,
 			total: unclassified.length,
 			autoFiltered,
 			aiFiltered,
+			filtered: autoFiltered + aiFiltered,
 			kept,
 			deleted,
 			message: `Filtered ${deleted} junk profiles (${autoFiltered} auto, ${aiFiltered} AI). Kept ${kept} real contacts.`,
@@ -871,7 +872,7 @@ JSON only, no markdown:`,
 
 export const enrichFromCalendar = action({
 	args: { userId: v.string() },
-	handler: async (ctx, args) => {
+	handler: async (ctx, args): Promise<{ enriched: number; newFromCalendar: number; totalMeetings: number; message: string }> => {
 		const profiles = await ctx.runQuery(internal.profileBuilder.getAllProfiles, {
 			userId: args.userId,
 		});
@@ -1009,7 +1010,7 @@ export const enrichFromCalendar = action({
 
 export const enrichFromInboundEmails = action({
 	args: { userId: v.string() },
-	handler: async (ctx, args) => {
+	handler: async (ctx, args): Promise<{ enriched: number; totalInboundEmails: number; uniqueSenders: number; message: string }> => {
 		const profiles = await ctx.runQuery(internal.profileBuilder.getAllProfiles, {
 			userId: args.userId,
 		});
@@ -1109,7 +1110,7 @@ export const profileExists = internalQuery({
 
 // Real-time: profile a new inbound contact
 // Called from email sync, SMS receive, Slack message sync
-export const profileNewContact = action({
+export const profileNewContact = internalAction({
 	args: {
 		userId: v.string(),
 		name: v.string(),
@@ -1231,10 +1232,10 @@ Reply with ONLY "real" or "junk" followed by a brief reason.`,
 			userId: args.userId,
 		});
 		const sharedMeetings = email
-			? events.filter((e) => e.attendees?.some((a) => a.toLowerCase() === email))
+			? events.filter((e: any) => e.attendees?.some((a: string) => a.toLowerCase() === email))
 			: [];
 		if (sharedMeetings.length > 0) {
-			profileContext += `\nShared meetings: ${sharedMeetings.map((e) => e.title).join(", ")}`;
+			profileContext += `\nShared meetings: ${sharedMeetings.map((e: any) => e.title).join(", ")}`;
 		}
 
 		// Generate profile with Claude
@@ -1547,13 +1548,13 @@ export const buildProfilesInternal = internalAction({
 
 export const filterProfilesInternal = internalAction({
 	args: { userId: v.string() },
-	handler: async (ctx, args) => {
+	handler: async (ctx, args): Promise<{ filtered: number; autoFiltered: number; aiFiltered: number; kept: number; deleted: number; message: string }> => {
 		const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-		if (!ANTHROPIC_API_KEY) return { filtered: 0, kept: 0, deleted: 0, message: "no api key" };
+		if (!ANTHROPIC_API_KEY) return { filtered: 0, autoFiltered: 0, aiFiltered: 0, kept: 0, deleted: 0, message: "no api key" };
 
 		const profiles = await ctx.runQuery(internal.profileBuilder.getAllProfiles, { userId: args.userId });
-		const unclassified = profiles.filter((p) => p.isReal === undefined);
-		if (unclassified.length === 0) return { filtered: 0, kept: 0, deleted: 0, message: "all classified" };
+		const unclassified = profiles.filter((p: any) => p.isReal === undefined);
+		if (unclassified.length === 0) return { filtered: 0, autoFiltered: 0, aiFiltered: 0, kept: 0, deleted: 0, message: "all classified" };
 
 		let autoFiltered = 0, aiFiltered = 0, kept = 0, deleted = 0;
 		const ambiguous: typeof unclassified = [];
@@ -1570,7 +1571,7 @@ export const filterProfilesInternal = internalAction({
 
 		for (let i = 0; i < ambiguous.length; i += 20) {
 			const batch = ambiguous.slice(i, i + 20);
-			const profileList = batch.map((p, idx) =>
+			const profileList = batch.map((p: any, idx: number) =>
 				`${idx + 1}. "${p.name}" <${p.email}> — ${p.emailsSent} sent. Summary: ${p.relationshipSummary.slice(0, 100)}`
 			).join("\n");
 
@@ -1611,7 +1612,7 @@ export const filterProfilesInternal = internalAction({
 
 export const enrichFromCalendarInternal = internalAction({
 	args: { userId: v.string() },
-	handler: async (ctx, args) => {
+	handler: async (ctx, args): Promise<{ enriched: number; newFromCalendar: number; totalMeetings: number; message: string }> => {
 		const profiles = await ctx.runQuery(internal.profileBuilder.getAllProfiles, { userId: args.userId });
 		const events = await ctx.runQuery(internal.profileBuilder.getAllCalendarEvents, { userId: args.userId });
 
@@ -1668,7 +1669,7 @@ export const enrichFromCalendarInternal = internalAction({
 
 export const enrichFromInboundEmailsInternal = internalAction({
 	args: { userId: v.string() },
-	handler: async (ctx, args) => {
+	handler: async (ctx, args): Promise<{ enriched: number; totalInboundEmails: number; uniqueSenders: number; message: string }> => {
 		const profiles = await ctx.runQuery(internal.profileBuilder.getAllProfiles, { userId: args.userId });
 		const emails = await ctx.runQuery(internal.profileBuilder.getAllEmails, { userId: args.userId });
 
