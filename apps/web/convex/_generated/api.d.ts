@@ -15,6 +15,7 @@ import type * as google from "../google.js";
 import type * as http from "../http.js";
 import type * as memories from "../memories.js";
 import type * as people from "../people.js";
+import type * as profileBuilder from "../profileBuilder.js";
 import type * as seed from "../seed.js";
 import type * as slack from "../slack.js";
 import type * as sms from "../sms.js";
@@ -34,6 +35,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   memories: typeof memories;
   people: typeof people;
+  profileBuilder: typeof profileBuilder;
   seed: typeof seed;
   slack: typeof slack;
   sms: typeof sms;

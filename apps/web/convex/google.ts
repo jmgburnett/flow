@@ -754,6 +754,28 @@ If apologizing: "I apologize for the delay" or "I dropped the ball". Uses "Would
 No emojis, no corporate jargon, no "Best regards". Match length to content. Writes like talking to a friend he respects.`;
 		}
 
+		// Try to load recipient's contact profile for context
+		const senderEmailMatch = email.from.match(/<(.+?)>/);
+		const senderEmail = senderEmailMatch ? senderEmailMatch[1].toLowerCase() : email.from.toLowerCase();
+		let recipientContext = "";
+		try {
+			const recipientProfile = await ctx.runQuery(internal.profileBuilder.getProfileByEmailInternal, {
+				userId: email.userId,
+				email: senderEmail,
+			});
+			if (recipientProfile) {
+				recipientContext = `\n\nCONTACT PROFILE for ${recipientProfile.name}:
+- Relationship: ${recipientProfile.relationshipSummary}
+- Topics you discuss: ${recipientProfile.topics.join(", ")}
+- Your communication style with them: ${recipientProfile.communicationStyle}
+- Tone: ${recipientProfile.sentiment}
+- Key context: ${recipientProfile.keyContext}
+- You've sent them ${recipientProfile.emailsSent} emails previously.`;
+			}
+		} catch {
+			// Profile not found, continue without it
+		}
+
 		const resp = await fetch("https://api.anthropic.com/v1/messages", {
 			method: "POST",
 			headers: {
@@ -767,7 +789,7 @@ No emojis, no corporate jargon, no "Best regards". Match length to content. Writ
 				messages: [
 					{
 						role: "user",
-						content: `${stylePrompt}
+						content: `${stylePrompt}${recipientContext}
 
 Output ONLY the email body. No subject line, no signature block.
 

@@ -268,6 +268,55 @@ export default defineSchema({
 		.index("by_message_ts", ["messageTs"])
 		.index("by_channel", ["channelId"]),
 
+	// Contact profiles — AI-generated rich profiles from all communication sources
+	contact_profiles: defineTable({
+		userId: v.string(),
+		contactId: v.optional(v.id("contacts")), // linked contact, if matched
+		email: v.string(), // primary email (lookup key)
+		name: v.string(),
+		// AI-generated profile
+		relationshipSummary: v.string(), // "Colleague at Gloo, works on platform engineering..."
+		topics: v.array(v.string()), // ["AI product", "church planting", "API integrations"]
+		communicationStyle: v.string(), // "Formal, detail-oriented, prefers bullet points"
+		sentiment: v.string(), // "warm", "professional", "casual", "formal"
+		keyContext: v.string(), // important context for AI to know when drafting
+		recentInteractions: v.array(v.object({
+			date: v.number(),
+			type: v.string(), // "email_sent", "email_received", "calendar", "sms", "slack"
+			summary: v.string(),
+		})),
+		// Metadata
+		emailsSent: v.number(), // count of emails Josh sent to this person
+		emailsReceived: v.number(), // count of emails received from this person
+		lastInteractionDate: v.optional(v.number()),
+		sources: v.array(v.string()), // ["email", "calendar", "sms", "slack"]
+		// Raw data for re-processing
+		rawEmailSamples: v.optional(v.string()), // JSON: sample email snippets used to build profile
+		builtAt: v.number(),
+		updatedAt: v.number(),
+	}).index("by_user", ["userId"])
+		.index("by_email", ["email"])
+		.index("by_contact", ["contactId"])
+		.index("by_user_and_email", ["userId", "email"]),
+
+	// Profile build progress tracking
+	profile_builds: defineTable({
+		userId: v.string(),
+		status: v.union(
+			v.literal("pending"),
+			v.literal("scanning"),
+			v.literal("building"),
+			v.literal("complete"),
+			v.literal("error"),
+		),
+		progress: v.number(), // 0-100
+		message: v.optional(v.string()),
+		totalRecipients: v.optional(v.number()),
+		profilesBuilt: v.optional(v.number()),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	}).index("by_user", ["userId"]),
+
 	// Email style profiles
 	style_profiles: defineTable({
 		userId: v.string(),
