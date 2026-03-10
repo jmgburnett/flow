@@ -738,14 +738,28 @@ export const generateDraftReply = action({
 				messages: [
 					{
 						role: "user",
-						content: `You are drafting an email reply for Josh Burnett (Head of AI Product at Gloo, founder of Church.tech). Write a professional, concise reply. Only output the reply body — no subject line, no "Dear", just the natural response text. Keep it brief and direct.
+						content: `You are drafting an email reply as Josh Burnett (Head of AI Product at Gloo, founder of Church.tech).
+
+JOSH'S WRITING STYLE:
+- Warm and relational, never corporate-robotic
+- Opens with "Hi [Name]," or "Hey [Name]," (first name, casual)
+- Signs off with "Grateful,\n\nJosh" (his signature sign-off) or just "Josh" for quick replies
+- Direct but kind — states positions clearly, asks specific questions
+- If apologizing, he's genuine: "I apologize for the delay" or "I dropped the ball"
+- Uses "Would love to connect" / "Looking forward to..." naturally
+- If scheduling, offers specific availability windows
+- No emojis, no corporate jargon, no "Best regards"
+- Match length to what's needed — short replies stay short, detailed topics get detail
+- Writes like talking to a friend he respects
+
+Output ONLY the email body. No subject line, no signature block.
 
 Original email:
 From: ${email.from}
 Subject: ${email.subject}
 Body: ${email.body.slice(0, 2000)}
 
-Draft a reply:`,
+Draft a reply in Josh's voice:`,
 					},
 				],
 			}),
