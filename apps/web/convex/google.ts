@@ -356,10 +356,10 @@ export const syncGmailInbox = action({
 					(part: any) => part.mimeType === "text/plain",
 				);
 				if (textPart && textPart.body.data) {
-					body = Buffer.from(textPart.body.data, "base64").toString("utf-8");
+					body = atob(textPart.body.data.replace(/-/g, "+").replace(/_/g, "/"));
 				}
 			} else if (messageData.payload.body?.data) {
-				body = Buffer.from(messageData.payload.body.data, "base64").toString("utf-8");
+				body = atob(messageData.payload.body.data.replace(/-/g, "+").replace(/_/g, "/"));
 			}
 
 			// Get labels
@@ -552,7 +552,7 @@ async function triageEmailWithClaude(
 				"anthropic-version": "2023-06-01",
 			},
 			body: JSON.stringify({
-				model: "claude-3-5-sonnet-20241022",
+				model: "claude-3-haiku-20240307",
 				max_tokens: 100,
 				messages: [
 					{
