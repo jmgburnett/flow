@@ -57,7 +57,7 @@ export function DashboardLayout({ children, user }: DashboardLayoutProps) {
 	};
 
 	return (
-		<div className="flex h-screen flex-col bg-background">
+		<div className="flex h-screen flex-col bg-background overflow-x-hidden">
 			{/* Top bar - mobile optimized */}
 			<header className="flex h-14 items-center justify-between border-b bg-background px-4 md:px-6">
 				<div className="flex items-center gap-3">

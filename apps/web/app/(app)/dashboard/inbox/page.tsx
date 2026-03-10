@@ -3,338 +3,169 @@
 import { useState } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Archive, Clock, Forward, Loader2, RefreshCw, Reply } from "lucide-react";
+import { Loader2, RefreshCw, ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useQuery, useAction, useMutation } from "convex/react";
+import { useQuery, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import Link from "next/link";
 
-// Mock data for fallback
-const mockEmails = [
-	{
-		id: "1",
-		from: "Doug Chen",
-		fromEmail: "doug@onflourish.com",
-		subject: "Q1 Pricing Strategy Discussion",
-		preview: "Hey Josh, wanted to get your thoughts on the new pricing tiers we discussed...",
-		body: "Hey Josh,\n\nWanted to get your thoughts on the new pricing tiers we discussed last week. I've put together a proposal that I think addresses the concerns about enterprise customers while maintaining our growth trajectory.\n\nKey changes:\n- New enterprise tier at $499/mo\n- Increased limits on standard tier\n- Better value prop for annual plans\n\nCan you review by EOD Thursday? Want to present this to the board on Friday.\n\nThanks,\nDoug",
-		time: "8:45 AM",
-		triage: "needs_me" as const,
-		unread: true,
-	},
-	{
-		id: "2",
-		from: "Carey Nieuwhof",
-		fromEmail: "carey@careynieuwhof.com",
-		subject: "Podcast Interview Request",
-		preview: "Would love to have you on the podcast to talk about Church.tech and the future of...",
-		body: "Hi Josh,\n\nHope you're doing well! I've been following the growth of Church.tech and would love to have you on the podcast.\n\nWould you be interested in a 30-45 minute conversation about:\n- The future of church technology\n- How AI is changing ministry\n- Your journey from Gloo to Church.tech\n\nWe typically record on Tuesday or Wednesday afternoons. Let me know if you're interested and we can find a time that works.\n\nBest,\nCarey",
-		time: "Yesterday",
-		triage: "draft_ready" as const,
-		unread: true,
-	},
-	{
-		id: "3",
-		from: "Sarah Johnson",
-		fromEmail: "sarah@onflourish.com",
-		subject: "Team Offsite Planning - Need Your Input",
-		preview: "Planning the Q2 team offsite and need to finalize the agenda. Can you...",
-		body: "Hey Josh,\n\nPlanning the Q2 team offsite for April 15-16. Got most of the logistics sorted but need your input on a few things:\n\n1. What topics do you want to cover in your opening session?\n2. Should we do a full-day workshop or split sessions?\n3. Any specific team building activities you want to include?\n\nAlso, Doug suggested we might want to bring in an external facilitator for the strategy session. Thoughts?\n\nNeed to lock this down by next week to finalize venue and catering.\n\nThanks!\nSarah",
-		time: "2 days ago",
-		triage: "needs_me" as const,
-		unread: false,
-	},
-	{
-		id: "4",
-		from: "EJ Swanson",
-		fromEmail: "ej@exponential.org",
-		subject: "Re: Partnership Opportunity",
-		preview: "Thanks for the intro to the team! Looking forward to exploring this further...",
-		body: "Josh,\n\nThanks for the intro to the team! Had a great initial call with Doug and Sarah yesterday.\n\nWe're definitely interested in exploring a partnership around church planting tools. The integration with Church.tech could be really powerful for our network.\n\nWould love to get 30 minutes with you to discuss the strategic vision and make sure we're aligned before we dive too deep into the details.\n\nHow does your schedule look next week?\n\nBest,\nEJ",
-		time: "3 days ago",
-		triage: "handled" as const,
-		unread: false,
-	},
-	{
-		id: "5",
-		from: "LinkedIn",
-		fromEmail: "notifications@linkedin.com",
-		subject: "You have 15 new profile views",
-		preview: "See who's been checking out your profile this week...",
-		body: "You have 15 new profile views this week.\n\nSee who's been viewing your profile and connect with them.",
-		time: "1 week ago",
-		triage: "ignore" as const,
-		unread: false,
-	},
-];
+type TriageFilter = "all" | "needs_me" | "draft_ready" | "handled" | "ignore";
 
-const triageBadges = {
-	needs_me: { label: "Needs Me", variant: "destructive" as const, color: "text-red-500" },
-	draft_ready: { label: "Draft Ready", variant: "default" as const, color: "text-yellow-500" },
-	handled: { label: "Handled", variant: "secondary" as const, color: "text-green-500" },
-	ignore: { label: "Ignore", variant: "outline" as const, color: "text-gray-500" },
-};
+const TRIAGE_CONFIG = {
+  needs_me: { label: "Needs You", color: "bg-red-500 text-white" },
+  draft_ready: { label: "Draft", color: "bg-yellow-500 text-white" },
+  handled: { label: "Handled", color: "bg-green-500 text-white" },
+  ignore: { label: "Ignore", color: "bg-gray-400 text-white" },
+} as const;
 
-function formatTimestamp(timestamp: number): string {
-	const now = Date.now();
-	const diff = now - timestamp;
-	const hours = diff / (1000 * 60 * 60);
-	const days = diff / (1000 * 60 * 60 * 24);
-
-	if (hours < 24) {
-		return new Date(timestamp).toLocaleTimeString("en-US", {
-			hour: "numeric",
-			minute: "2-digit",
-		});
-	}
-	if (days < 2) {
-		return "Yesterday";
-	}
-	if (days < 7) {
-		return `${Math.floor(days)} days ago`;
-	}
-	return new Date(timestamp).toLocaleDateString();
+function fmtDate(ts: number) {
+  const d = new Date(ts);
+  const now = new Date();
+  const diff = now.getTime() - ts;
+  if (diff < 60 * 60 * 1000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 24 * 60 * 60 * 1000) return `${Math.floor(diff / 3600000)}h ago`;
+  if (diff < 7 * 24 * 60 * 60 * 1000) return `${Math.ceil(diff / 86400000)}d ago`;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 export default function InboxPage() {
-	const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
-	const [filter, setFilter] = useState<"all" | "needs_me" | "draft_ready" | "handled">("all");
-	const [isSyncing, setIsSyncing] = useState(false);
+  const user = { name: "Josh", email: "josh@onflourish.com" };
+  const [filter, setFilter] = useState<TriageFilter>("all");
+  const [selectedEmail, setSelectedEmail] = useState<any>(null);
+  const [syncing, setSyncing] = useState(false);
 
-	// Fetch connections and emails from Convex
-	const connections = useQuery(api.google.getGoogleConnections, {
-		userId: "josh",
-	});
+  const connections = useQuery(api.google.getGoogleConnections, { userId: "josh" }) ?? [];
+  const syncGmail = useAction(api.google.syncGmailInbox);
 
-	const realEmailsData = useQuery(api.google.getEmails, {
-		userId: "josh",
-		triageStatus: filter === "all" ? undefined : filter,
-	});
+  const emails = useQuery(
+    api.google.getEmails,
+    filter === "all"
+      ? { userId: "josh" }
+      : { userId: "josh", triageStatus: filter as any },
+  ) ?? [];
 
-	const syncGmail = useAction(api.google.syncGmailInbox);
+  async function handleSync() {
+    setSyncing(true);
+    try {
+      for (const conn of connections) {
+        await syncGmail({ connectionId: conn._id as any });
+      }
+    } catch (e) {
+      console.error("Sync error:", e);
+    }
+    setSyncing(false);
+  }
 
-	// Transform real emails to match the UI format
-	const realEmails = realEmailsData?.map((email: any) => ({
-		id: email._id,
-		from: email.from.split("<")[0].trim() || email.from,
-		fromEmail: email.from.match(/<(.+)>/)?.[1] || email.from,
-		subject: email.subject,
-		preview: email.body.slice(0, 100),
-		body: email.body,
-		time: formatTimestamp(email.receivedAt),
-		triage: email.triageStatus,
-		unread: true, // We could add an unread field to the schema later
-	})) || [];
+  const filters: { key: TriageFilter; label: string }[] = [
+    { key: "all", label: "All" },
+    { key: "needs_me", label: "Needs You" },
+    { key: "draft_ready", label: "Drafts" },
+    { key: "handled", label: "Handled" },
+    { key: "ignore", label: "Ignored" },
+  ];
 
-	// Use real emails if available, otherwise fall back to mock data
-	const emails = realEmails.length > 0 ? realEmails : mockEmails;
+  // Email detail view
+  if (selectedEmail) {
+    const triage = TRIAGE_CONFIG[selectedEmail.triageStatus as keyof typeof TRIAGE_CONFIG];
+    return (
+      <DashboardLayout user={user}>
+        <div className="max-w-lg mx-auto w-full p-4 space-y-4">
+          <button type="button" onClick={() => setSelectedEmail(null)} className="flex items-center gap-1 text-sm text-muted-foreground">
+            <ChevronLeft className="h-4 w-4" /> Back
+          </button>
+          <div className="space-y-2">
+            <div className="flex items-start justify-between gap-2 min-w-0">
+              <h2 className="font-bold text-lg leading-tight flex-1 min-w-0">{selectedEmail.subject}</h2>
+              {triage && <Badge className={cn("text-[10px] shrink-0", triage.color)}>{triage.label}</Badge>}
+            </div>
+            <div className="text-sm text-muted-foreground">
+              <p className="truncate"><strong>From:</strong> {selectedEmail.from}</p>
+              <p className="truncate"><strong>To:</strong> {selectedEmail.to?.join(", ")}</p>
+              <p><strong>Account:</strong> {selectedEmail.accountEmail}</p>
+              <p>{fmtDate(selectedEmail.receivedAt)}</p>
+            </div>
+          </div>
+          <Card className="p-4">
+            <pre className="text-sm whitespace-pre-wrap break-words font-sans">{selectedEmail.body}</pre>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
-	const filteredEmails = emails;
+  return (
+    <DashboardLayout user={user}>
+      <div className="max-w-lg mx-auto w-full p-4 space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-bold">Inbox</h1>
+          <button
+            type="button"
+            onClick={handleSync}
+            disabled={syncing}
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+          >
+            {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Sync
+          </button>
+        </div>
 
-	const selectedEmail = selectedEmailId
-		? filteredEmails.find((e: any) => e.id === selectedEmailId) || filteredEmails[0]
-		: filteredEmails[0];
+        {/* Filter tabs */}
+        <div className="flex gap-2 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+          {filters.map((f) => (
+            <button
+              key={f.key}
+              type="button"
+              onClick={() => setFilter(f.key)}
+              className={cn(
+                "px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all",
+                filter === f.key ? "bg-blue-600 text-white" : "bg-muted text-foreground",
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
 
-	const handleSync = async () => {
-		if (!connections || connections.length === 0) return;
+        {/* Email count */}
+        <p className="text-xs text-muted-foreground">{emails.length} emails</p>
 
-		setIsSyncing(true);
-		try {
-			await Promise.all(
-				connections.map((conn: any) => syncGmail({ connectionId: conn._id })),
-			);
-		} catch (error) {
-			console.error("Sync failed:", error);
-		} finally {
-			setIsSyncing(false);
-		}
-	};
-
-	// Show empty state if no connections
-	if (connections !== undefined && connections.length === 0) {
-		return (
-			<DashboardLayout>
-				<div className="flex items-center justify-center h-full">
-					<div className="text-center space-y-4">
-						<p className="text-muted-foreground">
-							No Google accounts connected yet
-						</p>
-						<Link href="/dashboard/settings">
-							<Button>Connect Google Account</Button>
-						</Link>
-					</div>
-				</div>
-			</DashboardLayout>
-		);
-	}
-
-	return (
-		<DashboardLayout>
-			<div className="flex h-full">
-				{/* Email List */}
-				<div className="w-[400px] border-r flex flex-col">
-					<div className="p-4 border-b space-y-3">
-						<div className="flex items-center justify-between">
-							<h1 className="text-xl font-bold">Inbox</h1>
-							<Button
-								size="sm"
-								variant="outline"
-								onClick={handleSync}
-								disabled={isSyncing || !connections}
-							>
-								{isSyncing ? (
-									<>
-										<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-										Syncing...
-									</>
-								) : (
-									<>
-										<RefreshCw className="mr-2 h-4 w-4" />
-										Sync
-									</>
-								)}
-							</Button>
-						</div>
-						<Tabs value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
-							<TabsList className="grid w-full grid-cols-4">
-								<TabsTrigger value="all" className="text-xs">All</TabsTrigger>
-								<TabsTrigger value="needs_me" className="text-xs">Needs Me</TabsTrigger>
-								<TabsTrigger value="draft_ready" className="text-xs">Drafts</TabsTrigger>
-								<TabsTrigger value="handled" className="text-xs">Handled</TabsTrigger>
-							</TabsList>
-						</Tabs>
-					</div>
-					<div className="flex-1 overflow-auto">
-						{filteredEmails.map((email: any) => {
-							const badge = triageBadges[email.triage as keyof typeof triageBadges];
-							return (
-								<div
-									key={email.id}
-									onClick={() => setSelectedEmailId(email.id)}
-									className={cn(
-										"p-4 border-b cursor-pointer transition-colors hover:bg-accent",
-										selectedEmail?.id === email.id && "bg-accent",
-										email.unread && "font-medium",
-									)}
-								>
-									<div className="flex items-start gap-3">
-										<Avatar className="h-10 w-10 flex-shrink-0">
-											<AvatarFallback>{email.from[0]}</AvatarFallback>
-										</Avatar>
-										<div className="flex-1 min-w-0">
-											<div className="flex items-center gap-2 mb-1">
-												<p className={cn("text-sm truncate", email.unread && "font-semibold")}>
-													{email.from}
-												</p>
-												<span className={cn("text-lg", badge.color)}>●</span>
-											</div>
-											<p className={cn("text-sm truncate mb-1", email.unread && "font-semibold")}>
-												{email.subject}
-											</p>
-											<p className="text-xs text-muted-foreground truncate">
-												{email.preview}
-											</p>
-											<div className="flex items-center gap-2 mt-2">
-												<Badge variant={badge.variant} className="text-xs">
-													{badge.label}
-												</Badge>
-												<span className="text-xs text-muted-foreground">{email.time}</span>
-											</div>
-										</div>
-									</div>
-								</div>
-							);
-						})}
-					</div>
-				</div>
-
-				{/* Email Detail */}
-				<div className="flex-1 flex flex-col">
-					{selectedEmail ? (
-						<>
-							<div className="p-6 border-b">
-								<div className="flex items-start justify-between mb-4">
-									<div>
-										<h2 className="text-2xl font-bold mb-2">{selectedEmail.subject}</h2>
-										<div className="flex items-center gap-3">
-											<Avatar className="h-8 w-8">
-												<AvatarFallback>{selectedEmail.from[0]}</AvatarFallback>
-											</Avatar>
-											<div>
-												<p className="text-sm font-medium">{selectedEmail.from}</p>
-												<p className="text-xs text-muted-foreground">{selectedEmail.fromEmail}</p>
-											</div>
-											<Badge variant={triageBadges[selectedEmail.triage as keyof typeof triageBadges].variant}>
-												{triageBadges[selectedEmail.triage as keyof typeof triageBadges].label}
-											</Badge>
-										</div>
-									</div>
-									<p className="text-sm text-muted-foreground">{selectedEmail.time}</p>
-								</div>
-								<div className="flex gap-2">
-									<Button size="sm" className="gap-2">
-										<Reply className="h-4 w-4" />
-										Reply
-									</Button>
-									<Button size="sm" variant="outline" className="gap-2">
-										<Forward className="h-4 w-4" />
-										Forward to Flo
-									</Button>
-									<Button size="sm" variant="outline" className="gap-2">
-										<Archive className="h-4 w-4" />
-										Archive
-									</Button>
-									<Button size="sm" variant="outline" className="gap-2">
-										<Clock className="h-4 w-4" />
-										Snooze
-									</Button>
-								</div>
-							</div>
-							<div className="flex-1 p-6 overflow-auto">
-								<div className="prose max-w-none">
-									<pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">
-										{selectedEmail.body}
-									</pre>
-								</div>
-
-								{/* Draft reply section for draft_ready emails */}
-								{selectedEmail.triage === "draft_ready" && (
-									<Card className="mt-6 p-4 bg-yellow-50 border-yellow-200">
-										<p className="text-sm font-medium mb-2">AI-Generated Draft Reply:</p>
-										<div className="bg-white p-4 rounded border">
-											<p className="text-sm">
-												Hi Carey,
-												<br /><br />
-												Thanks so much for the invitation — I'd be honored to join you on the podcast!
-												<br /><br />
-												Those topics are right in my wheelhouse, especially around how AI is transforming ministry operations. I think we could have a great conversation about where church technology is headed in the next 3-5 years.
-												<br /><br />
-												Tuesday or Wednesday afternoons work well for me. I'm generally available after 2pm ET. What works best for you?
-												<br /><br />
-												Looking forward to it!
-												<br />
-												Josh
-											</p>
-										</div>
-										<div className="flex gap-2 mt-3">
-											<Button size="sm">Send Draft</Button>
-											<Button size="sm" variant="outline">Edit</Button>
-										</div>
-									</Card>
-								)}
-							</div>
-						</>
-					) : (
-						<div className="flex-1 flex items-center justify-center text-muted-foreground">
-							Select an email to view
-						</div>
-					)}
-				</div>
-			</div>
-		</DashboardLayout>
-	);
+        {/* Email list */}
+        <div className="space-y-2">
+          {emails.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">No emails in this category</p>
+            </div>
+          ) : (
+            emails.map((email: any) => {
+              const triage = TRIAGE_CONFIG[email.triageStatus as keyof typeof TRIAGE_CONFIG];
+              const fromName = email.from?.split("<")[0]?.trim() || email.from;
+              return (
+                <button
+                  key={email._id}
+                  type="button"
+                  onClick={() => setSelectedEmail(email)}
+                  className="w-full text-left"
+                >
+                  <Card className="p-3 hover:bg-muted/50 transition-colors">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <p className="font-medium text-sm truncate flex-1 min-w-0">{fromName}</p>
+                        <span className="text-[10px] text-muted-foreground shrink-0">{fmtDate(email.receivedAt)}</span>
+                      </div>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <p className="text-sm truncate flex-1 min-w-0">{email.subject}</p>
+                        {triage && <Badge className={cn("text-[10px] shrink-0", triage.color)}>{triage.label}</Badge>}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5 truncate">{email.accountEmail}</p>
+                    </div>
+                  </Card>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </DashboardLayout>
+  );
 }
