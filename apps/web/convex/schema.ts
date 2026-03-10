@@ -268,6 +268,33 @@ export default defineSchema({
 		.index("by_message_ts", ["messageTs"])
 		.index("by_channel", ["channelId"]),
 
+	// Email style profiles
+	style_profiles: defineTable({
+		userId: v.string(),
+		profile: v.string(), // JSON of full analysis
+		prompt: v.string(), // AI drafting prompt
+		emailsAnalyzed: v.number(),
+		accountsAnalyzed: v.array(v.string()),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	}).index("by_user", ["userId"]),
+
+	// Style analysis progress tracking
+	style_analyses: defineTable({
+		userId: v.string(),
+		status: v.union(
+			v.literal("pending"),
+			v.literal("fetching"),
+			v.literal("analyzing"),
+			v.literal("complete"),
+			v.literal("error"),
+		),
+		progress: v.number(),
+		message: v.optional(v.string()),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	}).index("by_user", ["userId"]),
+
 	// SMS Conversations
 	sms_conversations: defineTable({
 		userId: v.string(),

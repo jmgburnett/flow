@@ -17,6 +17,7 @@ import type * as memories from "../memories.js";
 import type * as people from "../people.js";
 import type * as seed from "../seed.js";
 import type * as slack from "../slack.js";
+import type * as styleAnalysis from "../styleAnalysis.js";
 import type * as sms from "../sms.js";
 
 import type {
@@ -35,6 +36,7 @@ declare const fullApi: ApiFromModules<{
   people: typeof people;
   seed: typeof seed;
   slack: typeof slack;
+  styleAnalysis: typeof styleAnalysis;
   sms: typeof sms;
 }>;
 

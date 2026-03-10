@@ -5,15 +5,24 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { Loader2, Plus, RefreshCw, Trash2, Mail, MessageSquare, Hash } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Trash2, Mail, MessageSquare, Hash, Sparkles, PenLine } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 
 export default function SettingsPage() {
 	const user = { name: "Josh", email: "josh@onflourish.com" };
 	const searchParams = useSearchParams();
 	const [isSyncing, setIsSyncing] = useState<Record<string, boolean>>({});
+	const [emailCount, setEmailCount] = useState("200");
+	const [isAnalyzing, setIsAnalyzing] = useState(false);
 
 	const googleConnections = useQuery(api.google.getGoogleConnections, { userId: "josh" });
 	const slackConnections = useQuery(api.slack.getSlackConnections, { userId: "josh" });
@@ -24,6 +33,10 @@ export default function SettingsPage() {
 
 	const syncSlack = useAction(api.slack.syncSlackMessages);
 	const deleteSlackConnection = useMutation(api.slack.deleteSlackConnection);
+
+	const styleProfile = useQuery(api.styleAnalysis.getStyleProfile, { userId: "josh" });
+	const analysisStatus = useQuery(api.styleAnalysis.getAnalysisStatus, { userId: "josh" });
+	const analyzeStyle = useAction(api.styleAnalysis.analyzeEmailStyle);
 
 	useEffect(() => {
 		const success = searchParams.get("success");
@@ -165,6 +178,130 @@ export default function SettingsPage() {
 									</div>
 								</div>
 							))
+						)}
+					</div>
+				</div>
+				{/* Writing Style */}
+				<div className="glass-card rounded-2xl overflow-hidden">
+					<div className="flex items-center justify-between px-5 pt-5 pb-3">
+						<div className="flex items-center gap-2.5">
+							<div className="h-8 w-8 rounded-xl bg-amber-500/10 flex items-center justify-center">
+								<PenLine className="h-4 w-4 text-amber-500" />
+							</div>
+							<div>
+								<h2 className="text-sm font-semibold">Writing Style</h2>
+								<p className="text-xs text-muted-foreground">AI learns your email voice</p>
+							</div>
+						</div>
+					</div>
+					<div className="px-5 pb-5 space-y-4">
+						{styleProfile ? (
+							<div className="space-y-3">
+								<div className="flex items-center gap-2 text-sm">
+									<Sparkles className="h-4 w-4 text-amber-500" />
+									<span className="font-medium">Style profile active</span>
+								</div>
+								<p className="text-xs text-muted-foreground">
+									Learned from {styleProfile.emailsAnalyzed} emails across{" "}
+									{(styleProfile as any).accountsAnalyzed?.length ?? 0} accounts
+								</p>
+								{(() => {
+									try {
+										const p = JSON.parse(styleProfile.profile);
+										return (
+											<div className="space-y-2 text-xs">
+												{p.tone && (
+													<div className="glass rounded-xl p-3">
+														<span className="font-medium text-foreground">Tone:</span>{" "}
+														<span className="text-muted-foreground">{p.tone}</span>
+													</div>
+												)}
+												{p.defaultSignoff && (
+													<div className="glass rounded-xl p-3">
+														<span className="font-medium text-foreground">Sign-off:</span>{" "}
+														<span className="text-muted-foreground">"{p.defaultSignoff}"</span>
+													</div>
+												)}
+												{p.keyPhrases && (
+													<div className="glass rounded-xl p-3">
+														<span className="font-medium text-foreground">Key phrases:</span>{" "}
+														<span className="text-muted-foreground">{p.keyPhrases.slice(0, 4).join(" · ")}</span>
+													</div>
+												)}
+											</div>
+										);
+									} catch {
+										return null;
+									}
+								})()}
+								<Button size="sm" variant="ghost" className="rounded-xl text-xs text-muted-foreground"
+									onClick={async () => {
+										setIsAnalyzing(true);
+										try {
+											await analyzeStyle({ userId: "josh", emailCount: parseInt(emailCount) });
+										} catch (e) { console.error(e); }
+										setIsAnalyzing(false);
+									}}
+									disabled={isAnalyzing}>
+									{isAnalyzing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
+									Re-analyze
+								</Button>
+							</div>
+						) : (
+							<div className="space-y-3">
+								{analysisStatus && analysisStatus.status !== "complete" && analysisStatus.status !== "error" ? (
+									<div className="space-y-2">
+										<div className="flex items-center gap-2">
+											<Loader2 className="h-4 w-4 animate-spin text-primary" />
+											<span className="text-sm font-medium">{analysisStatus.message}</span>
+										</div>
+										<div className="h-1.5 bg-muted rounded-full overflow-hidden">
+											<div
+												className="h-full bg-primary rounded-full transition-all duration-500"
+												style={{ width: `${analysisStatus.progress}%` }}
+											/>
+										</div>
+									</div>
+								) : (
+									<>
+										<p className="text-sm text-muted-foreground">
+											Scan your sent emails so AI drafts match your writing style.
+										</p>
+										{analysisStatus?.status === "error" && (
+											<p className="text-xs text-destructive">{analysisStatus.message}</p>
+										)}
+										<div className="flex items-center gap-3">
+											<Select value={emailCount} onValueChange={setEmailCount}>
+												<SelectTrigger className="w-[140px] h-9 rounded-xl text-xs">
+													<SelectValue />
+												</SelectTrigger>
+												<SelectContent>
+													<SelectItem value="50">50 emails</SelectItem>
+													<SelectItem value="100">100 emails</SelectItem>
+													<SelectItem value="200">200 emails</SelectItem>
+													<SelectItem value="300">300 emails</SelectItem>
+													<SelectItem value="500">500 emails</SelectItem>
+												</SelectContent>
+											</Select>
+											<Button size="sm" className="rounded-xl gap-1.5"
+												onClick={async () => {
+													setIsAnalyzing(true);
+													try {
+														await analyzeStyle({ userId: "josh", emailCount: parseInt(emailCount) });
+													} catch (e) { console.error(e); }
+													setIsAnalyzing(false);
+												}}
+												disabled={isAnalyzing || !googleConnections?.length}>
+												{isAnalyzing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+												Learn My Style
+											</Button>
+										</div>
+										{!googleConnections?.length && (
+											<p className="text-[10px] text-muted-foreground">Connect a Google account first</p>
+										)}
+									</>
+								)}
+							</div>
 						)}
 					</div>
 				</div>
