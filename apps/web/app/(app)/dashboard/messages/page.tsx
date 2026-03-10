@@ -1,161 +1,184 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ArrowLeft, Send } from "lucide-react";
+import { ArrowLeft, Send, Plus, Phone, MessageSquare, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
-// Format phone number for display
 function formatPhoneNumber(phone: string): string {
 	const cleaned = phone.replace(/\D/g, "");
 	if (cleaned.length === 11 && cleaned.startsWith("1")) {
-		const areaCode = cleaned.slice(1, 4);
-		const prefix = cleaned.slice(4, 7);
-		const line = cleaned.slice(7, 11);
-		return `(${areaCode}) ${prefix}-${line}`;
+		return `(${cleaned.slice(1, 4)}) ${cleaned.slice(4, 7)}-${cleaned.slice(7)}`;
+	}
+	if (cleaned.length === 10) {
+		return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
 	}
 	return phone;
 }
 
-// Format timestamp for display
 function formatTimestamp(timestamp: number): string {
-	const now = Date.now();
-	const diff = now - timestamp;
-	const minutes = diff / (1000 * 60);
-	const hours = diff / (1000 * 60 * 60);
-	const days = diff / (1000 * 60 * 60 * 24);
-
-	if (minutes < 60) {
-		return `${Math.floor(minutes)}m ago`;
-	}
-	if (hours < 24) {
-		return `${Math.floor(hours)}h ago`;
-	}
-	if (days < 2) {
-		return "Yesterday";
-	}
-	if (days < 7) {
-		return `${Math.floor(days)}d ago`;
-	}
+	const diff = Date.now() - timestamp;
+	const mins = diff / 60000;
+	const hrs = diff / 3600000;
+	const days = diff / 86400000;
+	if (mins < 60) return `${Math.floor(mins)}m`;
+	if (hrs < 24) return `${Math.floor(hrs)}h`;
+	if (days < 2) return "Yesterday";
+	if (days < 7) return `${Math.floor(days)}d`;
 	return new Date(timestamp).toLocaleDateString();
+}
+
+function formatMessageTime(timestamp: number): string {
+	return new Date(timestamp).toLocaleTimeString("en-US", {
+		hour: "numeric",
+		minute: "2-digit",
+	});
 }
 
 export default function MessagesPage() {
 	const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
 	const [messageInput, setMessageInput] = useState("");
+	const [isSending, setIsSending] = useState(false);
+	const [showNewMessage, setShowNewMessage] = useState(false);
+	const [newNumber, setNewNumber] = useState("");
+	const messagesEndRef = useRef<HTMLDivElement>(null);
 
-	// Fetch conversations and messages from Convex
-	const conversations = useQuery(api.sms.listConversations, {
-		userId: "josh",
-	});
-
+	const conversations = useQuery(api.sms.listConversations, { userId: "josh" });
 	const messages = useQuery(
 		api.sms.getMessages,
 		selectedPhone ? { userId: "josh", phoneNumber: selectedPhone } : "skip",
 	);
-
-	const sendMessage = useMutation(api.sms.sendMessage);
+	const sendSMS = useAction(api.sms.sendSMS);
 	const markRead = useMutation(api.sms.markRead);
 
-	const selectedConversation = conversations?.find(
-		(c) => c.phoneNumber === selectedPhone,
-	);
+	const selectedConvo = conversations?.find((c) => c.phoneNumber === selectedPhone);
 
-	const handleSelectConversation = async (phone: string) => {
+	// Scroll to bottom when messages change
+	useEffect(() => {
+		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+	}, [messages]);
+
+	const handleSelect = async (phone: string) => {
 		setSelectedPhone(phone);
-		// Mark as read when opening conversation
-		await markRead({
-			userId: "josh",
-			phoneNumber: phone,
-		});
+		setShowNewMessage(false);
+		await markRead({ userId: "josh", phoneNumber: phone });
 	};
 
-	const handleSendMessage = async () => {
+	const handleSend = async () => {
 		if (!messageInput.trim() || !selectedPhone) return;
-
-		await sendMessage({
-			userId: "josh",
-			from: "+16156408799", // Josh's Telnyx number
-			to: selectedPhone,
-			body: messageInput,
-			contactName: selectedConversation?.contactName,
-		});
-
-		setMessageInput("");
+		setIsSending(true);
+		try {
+			await sendSMS({
+				userId: "josh",
+				to: selectedPhone,
+				body: messageInput,
+				contactName: selectedConvo?.contactName,
+			});
+			setMessageInput("");
+		} catch (e: any) {
+			console.error("Send failed:", e);
+			alert(`Failed to send: ${e.message}`);
+		}
+		setIsSending(false);
 	};
 
-	const handleKeyPress = (e: React.KeyboardEvent) => {
-		if (e.key === "Enter" && !e.shiftKey) {
-			e.preventDefault();
-			handleSendMessage();
-		}
+	const handleNewConversation = () => {
+		const cleaned = newNumber.replace(/\D/g, "");
+		const phone = cleaned.length === 10 ? `+1${cleaned}` : cleaned.length === 11 ? `+${cleaned}` : newNumber;
+		setSelectedPhone(phone);
+		setShowNewMessage(false);
+		setNewNumber("");
 	};
 
 	return (
 		<DashboardLayout>
 			<div className="flex h-full flex-col md:flex-row">
 				{/* Conversation List */}
-				<div
-					className={cn(
-						"w-full border-b md:w-[380px] md:border-r md:border-b-0",
-						selectedPhone && "hidden md:block",
-					)}
-				>
-					<div className="border-b p-4">
-						<h1 className="text-lg font-bold md:text-xl">Messages</h1>
+				<div className={cn(
+					"w-full md:w-[340px] md:border-r border-border/40 flex flex-col",
+					selectedPhone && "hidden md:flex",
+				)}>
+					<div className="flex items-center justify-between px-5 py-4">
+						<div className="flex items-center gap-2">
+							<MessageSquare className="h-5 w-5 text-primary" />
+							<h1 className="text-lg font-semibold tracking-tight">Messages</h1>
+						</div>
+						<Button
+							size="icon"
+							variant="ghost"
+							className="rounded-xl h-8 w-8"
+							onClick={() => setShowNewMessage(!showNewMessage)}
+						>
+							<Plus className="h-4 w-4" />
+						</Button>
 					</div>
-					<div className="overflow-auto h-[calc(100vh-10rem)] md:h-[calc(100vh-7rem)]">
+
+					{showNewMessage && (
+						<div className="px-4 pb-3 flex gap-2">
+							<Input
+								placeholder="Phone number..."
+								value={newNumber}
+								onChange={(e) => setNewNumber(e.target.value)}
+								onKeyDown={(e) => e.key === "Enter" && handleNewConversation()}
+								className="rounded-xl text-sm h-9"
+								autoFocus
+							/>
+							<Button size="sm" className="rounded-xl" onClick={handleNewConversation} disabled={!newNumber.trim()}>
+								Go
+							</Button>
+						</div>
+					)}
+
+					<div className="flex-1 overflow-auto">
 						{conversations && conversations.length === 0 && (
-							<div className="flex items-center justify-center h-full p-8 text-center">
-								<p className="text-muted-foreground">No messages yet</p>
+							<div className="flex flex-col items-center justify-center h-40 text-center px-8">
+								<MessageSquare className="h-8 w-8 text-muted-foreground/30 mb-2" />
+								<p className="text-sm text-muted-foreground">No messages yet</p>
 							</div>
 						)}
-						{conversations?.map((conversation) => (
-							<div
-								key={conversation._id}
-								onClick={() => handleSelectConversation(conversation.phoneNumber)}
+						{conversations?.map((convo) => (
+							<button
+								type="button"
+								key={convo._id}
+								onClick={() => handleSelect(convo.phoneNumber)}
 								className={cn(
-									"flex items-start gap-3 border-b p-4 cursor-pointer transition-colors active:bg-accent",
-									"hover:bg-accent/50",
-									selectedPhone === conversation.phoneNumber && "bg-accent",
+									"flex items-center gap-3 w-full px-4 py-3 text-left transition-all",
+									"hover:bg-accent/50 active:bg-accent",
+									selectedPhone === convo.phoneNumber && "bg-accent",
 								)}
 							>
-								<Avatar className="h-12 w-12 flex-shrink-0">
-									<AvatarFallback className="bg-blue-600 text-white">
-										{conversation.contactName?.[0] || "?"}
+								<Avatar className="h-10 w-10 flex-shrink-0">
+									<AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
+										{convo.contactName?.[0]?.toUpperCase() || "#"}
 									</AvatarFallback>
 								</Avatar>
 								<div className="flex-1 min-w-0">
-									<div className="flex items-center justify-between mb-1">
-										<p className="font-semibold text-sm truncate">
-											{conversation.contactName || formatPhoneNumber(conversation.phoneNumber)}
+									<div className="flex items-center justify-between">
+										<p className="text-[13px] font-medium truncate">
+											{convo.contactName || formatPhoneNumber(convo.phoneNumber)}
 										</p>
-										<span className="text-xs text-muted-foreground flex-shrink-0 ml-2">
-											{formatTimestamp(conversation.lastMessageAt)}
+										<span className="text-[11px] text-muted-foreground ml-2 flex-shrink-0">
+											{formatTimestamp(convo.lastMessageAt)}
 										</span>
 									</div>
-									<div className="flex items-center justify-between">
-										<p className="text-sm text-muted-foreground truncate">
-											{conversation.lastMessage}
+									<div className="flex items-center justify-between mt-0.5">
+										<p className="text-xs text-muted-foreground truncate pr-2">
+											{convo.lastMessage}
 										</p>
-										{conversation.unreadCount > 0 && (
-											<Badge
-												variant="destructive"
-												className="ml-2 h-5 w-5 flex-shrink-0 rounded-full p-0 flex items-center justify-center text-[10px]"
-											>
-												{conversation.unreadCount}
+										{convo.unreadCount > 0 && (
+											<Badge className="h-4 min-w-[16px] rounded-full px-1 text-[10px] bg-primary flex-shrink-0">
+												{convo.unreadCount}
 											</Badge>
 										)}
 									</div>
 								</div>
-							</div>
+							</button>
 						))}
 					</div>
 				</div>
@@ -164,96 +187,102 @@ export default function MessagesPage() {
 				{selectedPhone ? (
 					<div className="flex flex-1 flex-col">
 						{/* Header */}
-						<div className="flex items-center gap-3 border-b p-4">
+						<div className="flex items-center gap-3 px-4 py-3 glass-heavy border-b border-border/40">
 							<Button
 								variant="ghost"
 								size="icon"
-								className="md:hidden"
+								className="md:hidden rounded-xl h-8 w-8"
 								onClick={() => setSelectedPhone(null)}
 							>
-								<ArrowLeft className="h-5 w-5" />
+								<ArrowLeft className="h-4 w-4" />
 							</Button>
-							<Avatar className="h-10 w-10">
-								<AvatarFallback className="bg-blue-600 text-white">
-									{selectedConversation?.contactName?.[0] || "?"}
+							<Avatar className="h-9 w-9">
+								<AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
+									{selectedConvo?.contactName?.[0]?.toUpperCase() || "#"}
 								</AvatarFallback>
 							</Avatar>
-							<div className="flex-1">
-								<p className="font-semibold">
-									{selectedConversation?.contactName || formatPhoneNumber(selectedPhone)}
+							<div className="flex-1 min-w-0">
+								<p className="text-sm font-semibold truncate">
+									{selectedConvo?.contactName || formatPhoneNumber(selectedPhone)}
 								</p>
-								{selectedConversation?.contactName && (
-									<p className="text-xs text-muted-foreground">
-										{formatPhoneNumber(selectedPhone)}
-									</p>
-								)}
+								<p className="text-[11px] text-muted-foreground">
+									{formatPhoneNumber(selectedPhone)}
+								</p>
 							</div>
+							<Button variant="ghost" size="icon" className="rounded-xl h-8 w-8">
+								<Phone className="h-4 w-4" />
+							</Button>
 						</div>
 
 						{/* Messages */}
-						<div className="flex-1 overflow-auto p-4 space-y-4 bg-slate-50 dark:bg-slate-900/20">
-							{messages?.map((message) => {
-								const isOutbound = message.direction === "outbound";
+						<div className="flex-1 overflow-auto px-4 py-4 space-y-2">
+							{messages?.map((msg, i) => {
+								const isOut = msg.direction === "outbound";
+								const prevMsg = messages[i - 1];
+								const showTime = !prevMsg || msg.timestamp - prevMsg.timestamp > 300000;
+
 								return (
-									<div
-										key={message._id}
-										className={cn(
-											"flex",
-											isOutbound ? "justify-end" : "justify-start",
+									<div key={msg._id}>
+										{showTime && (
+											<div className="flex justify-center my-3">
+												<span className="text-[10px] text-muted-foreground glass px-2.5 py-0.5 rounded-full">
+													{formatMessageTime(msg.timestamp)}
+												</span>
+											</div>
 										)}
-									>
-										<div
-											className={cn(
-												"max-w-[80%] rounded-2xl px-4 py-2",
-												isOutbound
-													? "bg-blue-600 text-white"
-													: "bg-white dark:bg-slate-800 text-foreground",
-											)}
-										>
-											<p className="text-sm whitespace-pre-wrap break-words">
-												{message.body}
-											</p>
-											<p
-												className={cn(
-													"text-[10px] mt-1",
-													isOutbound ? "text-blue-100" : "text-muted-foreground",
-												)}
-											>
-												{new Date(message.timestamp).toLocaleTimeString("en-US", {
-													hour: "numeric",
-													minute: "2-digit",
-												})}
-											</p>
+										<div className={cn("flex", isOut ? "justify-end" : "justify-start")}>
+											<div className={cn(
+												"max-w-[80%] rounded-2xl px-3.5 py-2",
+												isOut
+													? "bg-primary text-primary-foreground rounded-br-md"
+													: "glass rounded-bl-md",
+											)}>
+												<p className="text-[13px] leading-relaxed whitespace-pre-wrap break-words">
+													{msg.body}
+												</p>
+											</div>
 										</div>
 									</div>
 								);
 							})}
+							<div ref={messagesEndRef} />
 						</div>
 
-						{/* Input Bar */}
-						<div className="border-t p-4 bg-background">
+						{/* Input */}
+						<div className="px-4 py-3 glass-heavy border-t border-border/40">
 							<div className="flex items-end gap-2">
 								<Input
-									placeholder="Type a message..."
+									placeholder="iMessage"
 									value={messageInput}
 									onChange={(e) => setMessageInput(e.target.value)}
-									onKeyDown={handleKeyPress}
-									className="flex-1 min-h-[44px] resize-none"
+									onKeyDown={(e) => {
+										if (e.key === "Enter" && !e.shiftKey) {
+											e.preventDefault();
+											handleSend();
+										}
+									}}
+									className="flex-1 rounded-2xl border-0 glass h-10 text-sm px-4"
+									disabled={isSending}
 								/>
 								<Button
 									size="icon"
-									className="h-11 w-11 flex-shrink-0"
-									onClick={handleSendMessage}
-									disabled={!messageInput.trim()}
+									className="h-10 w-10 rounded-full flex-shrink-0"
+									onClick={handleSend}
+									disabled={!messageInput.trim() || isSending}
 								>
-									<Send className="h-5 w-5" />
+									{isSending ? (
+										<Loader2 className="h-4 w-4 animate-spin" />
+									) : (
+										<Send className="h-4 w-4" />
+									)}
 								</Button>
 							</div>
 						</div>
 					</div>
 				) : (
-					<div className="hidden md:flex flex-1 items-center justify-center text-muted-foreground">
-						Select a conversation to view messages
+					<div className="hidden md:flex flex-1 flex-col items-center justify-center text-muted-foreground gap-2">
+						<MessageSquare className="h-10 w-10 text-muted-foreground/20" />
+						<p className="text-sm">Select a conversation</p>
 					</div>
 				)}
 			</div>

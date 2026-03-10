@@ -1,21 +1,18 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { action, mutation, query, internalMutation } from "./_generated/server";
+import { internal, api } from "./_generated/api";
+
+const TELNYX_FROM = "+16156408799";
 
 // List all SMS conversations for a user, sorted by most recent
 export const listConversations = query({
-	args: {
-		userId: v.string(),
-	},
+	args: { userId: v.string() },
 	handler: async (ctx, args) => {
-		const conversations = await ctx.db
+		return await ctx.db
 			.query("sms_conversations")
-			.withIndex("by_user_and_last_message", (q) =>
-				q.eq("userId", args.userId),
-			)
+			.withIndex("by_user_and_last_message", (q) => q.eq("userId", args.userId))
 			.order("desc")
 			.collect();
-
-		return conversations;
 	},
 });
 
@@ -26,12 +23,9 @@ export const getMessages = query({
 		phoneNumber: v.string(),
 	},
 	handler: async (ctx, args) => {
-		// Get messages where either from or to matches the phone number
 		const messages = await ctx.db
 			.query("sms_messages")
-			.withIndex("by_user_and_timestamp", (q) =>
-				q.eq("userId", args.userId),
-			)
+			.withIndex("by_user_and_timestamp", (q) => q.eq("userId", args.userId))
 			.filter((q) =>
 				q.or(
 					q.eq(q.field("from"), args.phoneNumber),
@@ -40,66 +34,124 @@ export const getMessages = query({
 			)
 			.order("asc")
 			.collect();
-
 		return messages;
 	},
 });
 
-// Send an outbound SMS message
-export const sendMessage = mutation({
+// Get unread count across all conversations
+export const unreadCount = query({
+	args: { userId: v.string() },
+	handler: async (ctx, args) => {
+		const convos = await ctx.db
+			.query("sms_conversations")
+			.withIndex("by_user", (q) => q.eq("userId", args.userId))
+			.collect();
+		return convos.reduce((sum, c) => sum + c.unreadCount, 0);
+	},
+});
+
+// Send SMS via Telnyx API + store in Convex
+export const sendSMS = action({
 	args: {
 		userId: v.string(),
 		to: v.string(),
 		body: v.string(),
-		from: v.string(), // Josh's Telnyx number
+		contactName: v.optional(v.string()),
+	},
+	handler: async (ctx, args): Promise<{ success: boolean; messageId?: string }> => {
+		const TELNYX_API_KEY = process.env.TELNYX_API_KEY;
+		if (!TELNYX_API_KEY) throw new Error("TELNYX_API_KEY not configured");
+
+		// Send via Telnyx
+		const resp = await fetch("https://api.telnyx.com/v2/messages", {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${TELNYX_API_KEY}`,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({
+				from: TELNYX_FROM,
+				to: args.to,
+				text: args.body,
+				messaging_profile_id: "40019cca-23bf-45ae-915e-29f994a75030",
+			}),
+		});
+
+		if (!resp.ok) {
+			const err = await resp.text();
+			console.error("Telnyx send failed:", err);
+			throw new Error(`SMS send failed: ${err.substring(0, 200)}`);
+		}
+
+		// Store in Convex
+		await ctx.runMutation(internal.sms.storeMessage, {
+			userId: args.userId,
+			direction: "outbound",
+			from: TELNYX_FROM,
+			to: args.to,
+			body: args.body,
+			contactName: args.contactName,
+		});
+
+		return { success: true };
+	},
+});
+
+// Internal mutation to store a message and update conversation
+export const storeMessage = internalMutation({
+	args: {
+		userId: v.string(),
+		direction: v.union(v.literal("inbound"), v.literal("outbound")),
+		from: v.string(),
+		to: v.string(),
+		body: v.string(),
 		contactName: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		const timestamp = Date.now();
+		const isInbound = args.direction === "inbound";
+		const contactPhone = isInbound ? args.from : args.to;
 
-		// Store the message
-		const messageId = await ctx.db.insert("sms_messages", {
+		// Store message
+		await ctx.db.insert("sms_messages", {
 			userId: args.userId,
-			direction: "outbound",
+			direction: args.direction,
 			from: args.from,
 			to: args.to,
 			body: args.body,
 			timestamp,
-			read: true, // Outbound messages are always "read"
+			read: !isInbound,
 			contactName: args.contactName,
 		});
 
-		// Update or create the conversation
-		const existingConversation = await ctx.db
+		// Update or create conversation
+		const existing = await ctx.db
 			.query("sms_conversations")
-			.withIndex("by_phone_number", (q) =>
-				q.eq("phoneNumber", args.to),
-			)
+			.withIndex("by_phone_number", (q) => q.eq("phoneNumber", contactPhone))
 			.filter((q) => q.eq(q.field("userId"), args.userId))
 			.first();
 
-		if (existingConversation) {
-			await ctx.db.patch(existingConversation._id, {
+		if (existing) {
+			await ctx.db.patch(existing._id, {
 				lastMessage: args.body,
 				lastMessageAt: timestamp,
-				// Don't change unreadCount for outbound messages
+				...(isInbound ? { unreadCount: existing.unreadCount + 1 } : {}),
+				...(args.contactName ? { contactName: args.contactName } : {}),
 			});
 		} else {
 			await ctx.db.insert("sms_conversations", {
 				userId: args.userId,
-				phoneNumber: args.to,
+				phoneNumber: contactPhone,
 				contactName: args.contactName,
 				lastMessage: args.body,
 				lastMessageAt: timestamp,
-				unreadCount: 0,
+				unreadCount: isInbound ? 1 : 0,
 			});
 		}
-
-		return messageId;
 	},
 });
 
-// Receive an inbound SMS message (called by webhook)
+// Public mutation for webhook to call (inbound SMS)
 export const receiveMessage = mutation({
 	args: {
 		userId: v.string(),
@@ -110,9 +162,9 @@ export const receiveMessage = mutation({
 	},
 	handler: async (ctx, args) => {
 		const timestamp = Date.now();
+		const contactPhone = args.from;
 
-		// Store the message
-		const messageId = await ctx.db.insert("sms_messages", {
+		await ctx.db.insert("sms_messages", {
 			userId: args.userId,
 			direction: "inbound",
 			from: args.from,
@@ -123,33 +175,29 @@ export const receiveMessage = mutation({
 			contactName: args.contactName,
 		});
 
-		// Update or create the conversation
-		const existingConversation = await ctx.db
+		const existing = await ctx.db
 			.query("sms_conversations")
-			.withIndex("by_phone_number", (q) =>
-				q.eq("phoneNumber", args.from),
-			)
+			.withIndex("by_phone_number", (q) => q.eq("phoneNumber", contactPhone))
 			.filter((q) => q.eq(q.field("userId"), args.userId))
 			.first();
 
-		if (existingConversation) {
-			await ctx.db.patch(existingConversation._id, {
+		if (existing) {
+			await ctx.db.patch(existing._id, {
 				lastMessage: args.body,
 				lastMessageAt: timestamp,
-				unreadCount: existingConversation.unreadCount + 1,
+				unreadCount: existing.unreadCount + 1,
+				...(args.contactName ? { contactName: args.contactName } : {}),
 			});
 		} else {
 			await ctx.db.insert("sms_conversations", {
 				userId: args.userId,
-				phoneNumber: args.from,
+				phoneNumber: contactPhone,
 				contactName: args.contactName,
 				lastMessage: args.body,
 				lastMessageAt: timestamp,
 				unreadCount: 1,
 			});
 		}
-
-		return messageId;
 	},
 });
 
@@ -160,30 +208,20 @@ export const markRead = mutation({
 		phoneNumber: v.string(),
 	},
 	handler: async (ctx, args) => {
-		// Find the conversation
 		const conversation = await ctx.db
 			.query("sms_conversations")
-			.withIndex("by_phone_number", (q) =>
-				q.eq("phoneNumber", args.phoneNumber),
-			)
+			.withIndex("by_phone_number", (q) => q.eq("phoneNumber", args.phoneNumber))
 			.filter((q) => q.eq(q.field("userId"), args.userId))
 			.first();
 
-		if (!conversation) {
-			return;
+		if (conversation) {
+			await ctx.db.patch(conversation._id, { unreadCount: 0 });
 		}
 
-		// Mark the conversation as read
-		await ctx.db.patch(conversation._id, {
-			unreadCount: 0,
-		});
-
 		// Mark all messages from this number as read
-		const messages = await ctx.db
+		const unread = await ctx.db
 			.query("sms_messages")
-			.withIndex("by_from", (q) =>
-				q.eq("from", args.phoneNumber),
-			)
+			.withIndex("by_from", (q) => q.eq("from", args.phoneNumber))
 			.filter((q) =>
 				q.and(
 					q.eq(q.field("userId"), args.userId),
@@ -192,86 +230,8 @@ export const markRead = mutation({
 			)
 			.collect();
 
-		for (const message of messages) {
-			await ctx.db.patch(message._id, { read: true });
+		for (const msg of unread) {
+			await ctx.db.patch(msg._id, { read: true });
 		}
-	},
-});
-
-// Seed some example conversations for development
-export const seedExampleConversations = mutation({
-	args: {
-		userId: v.string(),
-	},
-	handler: async (ctx, args) => {
-		const now = Date.now();
-		const oneHourAgo = now - 60 * 60 * 1000;
-		const twoDaysAgo = now - 2 * 24 * 60 * 60 * 1000;
-		const threeDaysAgo = now - 3 * 24 * 60 * 60 * 1000;
-
-		// Sarah Burnett conversation
-		const sarahPhone = "+17036597403";
-		await ctx.db.insert("sms_conversations", {
-			userId: args.userId,
-			phoneNumber: sarahPhone,
-			contactName: "Sarah Burnett",
-			lastMessage: "Hey, can you pick up milk on the way home?",
-			lastMessageAt: oneHourAgo,
-			unreadCount: 1,
-		});
-		await ctx.db.insert("sms_messages", {
-			userId: args.userId,
-			direction: "inbound",
-			from: sarahPhone,
-			to: "+16156408799",
-			body: "Hey, can you pick up milk on the way home?",
-			timestamp: oneHourAgo,
-			read: false,
-			contactName: "Sarah Burnett",
-		});
-
-		// Savannah conversation
-		const savannahPhone = "+14102991873";
-		await ctx.db.insert("sms_conversations", {
-			userId: args.userId,
-			phoneNumber: savannahPhone,
-			contactName: "Savannah",
-			lastMessage: "Dad, what time is dinner?",
-			lastMessageAt: twoDaysAgo,
-			unreadCount: 1,
-		});
-		await ctx.db.insert("sms_messages", {
-			userId: args.userId,
-			direction: "inbound",
-			from: savannahPhone,
-			to: "+16156408799",
-			body: "Dad, what time is dinner?",
-			timestamp: twoDaysAgo,
-			read: false,
-			contactName: "Savannah",
-		});
-
-		// Doug Foltz conversation
-		const dougPhone = "+15551234567"; // Placeholder since we don't have his real number
-		await ctx.db.insert("sms_conversations", {
-			userId: args.userId,
-			phoneNumber: dougPhone,
-			contactName: "Doug Foltz",
-			lastMessage: "Call me when you get a chance about the church planter launch",
-			lastMessageAt: threeDaysAgo,
-			unreadCount: 0,
-		});
-		await ctx.db.insert("sms_messages", {
-			userId: args.userId,
-			direction: "inbound",
-			from: dougPhone,
-			to: "+16156408799",
-			body: "Call me when you get a chance about the church planter launch",
-			timestamp: threeDaysAgo,
-			read: true,
-			contactName: "Doug Foltz",
-		});
-
-		return { success: true };
 	},
 });
