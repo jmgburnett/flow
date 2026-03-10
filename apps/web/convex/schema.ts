@@ -290,6 +290,12 @@ export default defineSchema({
 		emailsReceived: v.number(), // count of emails received from this person
 		lastInteractionDate: v.optional(v.number()),
 		sources: v.array(v.string()), // ["email", "calendar", "sms", "slack"]
+		// Calendar enrichment
+		sharedMeetings: v.optional(v.number()),
+		meetingTopics: v.optional(v.array(v.string())),
+		// Filtration
+		isReal: v.optional(v.boolean()), // true = real person, false = marketing/automated
+		filterReason: v.optional(v.string()), // why it was filtered out
 		// Raw data for re-processing
 		rawEmailSamples: v.optional(v.string()), // JSON: sample email snippets used to build profile
 		builtAt: v.number(),
@@ -297,7 +303,8 @@ export default defineSchema({
 	}).index("by_user", ["userId"])
 		.index("by_email", ["email"])
 		.index("by_contact", ["contactId"])
-		.index("by_user_and_email", ["userId", "email"]),
+		.index("by_user_and_email", ["userId", "email"])
+		.index("by_user_and_real", ["userId", "isReal"]),
 
 	// Profile build progress tracking
 	profile_builds: defineTable({
