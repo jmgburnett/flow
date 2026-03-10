@@ -2,157 +2,156 @@
 
 import { useState } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ChevronLeft, ChevronRight, Loader2, Plus, RefreshCw, Users } from "lucide-react";
+import {
+	ChevronLeft,
+	ChevronRight,
+	Loader2,
+	RefreshCw,
+	Calendar,
+	MapPin,
+	Users,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQuery, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import Link from "next/link";
 
-// Mock events for MVP
-const mockEvents = [
-	{
-		id: "1",
-		title: "Team Standup",
-		startTime: 9,
-		duration: 0.5,
-		day: 1, // Monday
-		attendees: ["Doug Chen", "Sarah Johnson"],
-		color: "bg-blue-500",
-		prepNotes: "Review yesterday's progress and blockers",
-	},
-	{
-		id: "2",
-		title: "Product Review",
-		startTime: 11.5,
-		duration: 1,
-		day: 1,
-		attendees: ["Carey Nieuwhof", "EJ Swanson"],
-		color: "bg-indigo-500",
-		prepNotes: "Discuss Q2 roadmap and feature priorities",
-	},
-	{
-		id: "3",
-		title: "1:1 with Doug",
-		startTime: 14,
-		duration: 0.5,
-		day: 1,
-		attendees: ["Doug Chen"],
-		color: "bg-purple-500",
-		prepNotes: "Pricing strategy follow-up from last week's email",
-	},
-	{
-		id: "4",
-		title: "Engineering Sync",
-		startTime: 10,
-		duration: 1,
-		day: 2,
-		attendees: ["Tech Team"],
-		color: "bg-blue-500",
-		prepNotes: "",
-	},
-	{
-		id: "5",
-		title: "Customer Call - Willow Creek",
-		startTime: 15,
-		duration: 1,
-		day: 2,
-		attendees: ["Sarah Johnson", "Client"],
-		color: "bg-green-500",
-		prepNotes: "Large church interested in enterprise plan",
-	},
-	{
-		id: "6",
-		title: "Board Meeting Prep",
-		startTime: 13,
-		duration: 2,
-		day: 3,
-		attendees: ["Doug Chen", "Sarah Johnson"],
-		color: "bg-red-500",
-		prepNotes: "Finalize Q1 numbers and Q2 projections",
-	},
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const FULL_DAY_NAMES = [
+	"Sunday",
+	"Monday",
+	"Tuesday",
+	"Wednesday",
+	"Thursday",
+	"Friday",
+	"Saturday",
 ];
 
-const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri"];
-const hours = Array.from({ length: 13 }, (_, i) => i + 8); // 8am to 8pm
+function getWeekDates(baseDate: Date): Date[] {
+	const start = new Date(baseDate);
+	const day = start.getDay();
+	// Start from Monday
+	const diff = day === 0 ? -6 : 1 - day;
+	start.setDate(start.getDate() + diff);
+	start.setHours(0, 0, 0, 0);
+
+	return Array.from({ length: 7 }, (_, i) => {
+		const d = new Date(start);
+		d.setDate(d.getDate() + i);
+		return d;
+	});
+}
+
+function isSameDay(a: Date, b: Date) {
+	return (
+		a.getFullYear() === b.getFullYear() &&
+		a.getMonth() === b.getMonth() &&
+		a.getDate() === b.getDate()
+	);
+}
+
+function fmtTime(ts: number) {
+	return new Date(ts).toLocaleTimeString("en-US", {
+		hour: "numeric",
+		minute: "2-digit",
+	});
+}
+
+function fmtDuration(start: number, end: number) {
+	const mins = Math.round((end - start) / 60000);
+	if (mins < 60) return `${mins}m`;
+	const hrs = Math.floor(mins / 60);
+	const remainMins = mins % 60;
+	return remainMins > 0 ? `${hrs}h ${remainMins}m` : `${hrs}h`;
+}
 
 export default function CalendarPage() {
-	const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
-	const [currentWeek, setCurrentWeek] = useState("March 10-14, 2026");
+	const user = { name: "Josh", email: "josh@onflourish.com" };
+	const today = new Date();
+	const [baseDate, setBaseDate] = useState(today);
+	const [selectedDate, setSelectedDate] = useState(today);
 	const [isSyncing, setIsSyncing] = useState(false);
+	const [selectedEvent, setSelectedEvent] = useState<any>(null);
 
-	// Get connections and events from Convex
-	const connections = useQuery(api.google.getGoogleConnections, {
-		userId: "josh",
-	});
+	const weekDates = getWeekDates(baseDate);
+	const weekStart = weekDates[0].getTime();
+	const weekEnd = weekDates[6].getTime() + 24 * 60 * 60 * 1000;
 
-	// Get events for the next 7 days
-	const now = Date.now();
-	const sevenDaysLater = now + 7 * 24 * 60 * 60 * 1000;
-	const realEventsData = useQuery(api.google.getCalendarEvents, {
-		userId: "josh",
-		startTime: now,
-		endTime: sevenDaysLater,
-	});
+	const connections =
+		useQuery(api.google.getGoogleConnections, { userId: "josh" }) ?? [];
+
+	const events =
+		useQuery(api.google.getCalendarEvents, {
+			userId: "josh",
+			startTime: weekStart,
+			endTime: weekEnd,
+		}) ?? [];
 
 	const syncCalendar = useAction(api.google.syncCalendar);
 
-	// Transform real events to match the UI format
-	const realEvents = realEventsData?.map((event: any) => {
-		const startDate = new Date(event.startTime);
-		const endDate = new Date(event.endTime);
-		const duration = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60);
-		const dayOfWeek = startDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
-		const adjustedDay = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Convert to 0 = Monday
-		const hour = startDate.getHours() + startDate.getMinutes() / 60;
+	// Events for selected day
+	const dayEvents = events
+		.filter((e: any) => isSameDay(new Date(e.startTime), selectedDate))
+		.sort((a: any, b: any) => a.startTime - b.startTime);
 
-		return {
-			id: event._id,
-			title: event.title,
-			startTime: hour,
-			duration,
-			day: adjustedDay,
-			attendees: event.attendees || [],
-			color: "bg-blue-500",
-			prepNotes: event.prepNotes || "",
-		};
-	}).filter((event: any) => event.day >= 0 && event.day < 5) || []; // Only show weekdays
+	// Events count per day for dots
+	function eventsOnDay(date: Date) {
+		return events.filter((e: any) => isSameDay(new Date(e.startTime), date))
+			.length;
+	}
 
-	// Use real events if available, otherwise fall back to mock data
-	const events = realEvents.length > 0 ? realEvents : mockEvents;
-
-	const selectedEvent = selectedEventId
-		? events.find((e: any) => e.id === selectedEventId) || null
-		: null;
-
-	const handleSync = async () => {
-		if (!connections || connections.length === 0) return;
-
+	async function handleSync() {
+		if (connections.length === 0) return;
 		setIsSyncing(true);
 		try {
-			await Promise.all(
-				connections.map((conn: any) => syncCalendar({ connectionId: conn._id })),
-			);
-		} catch (error) {
-			console.error("Sync failed:", error);
-		} finally {
-			setIsSyncing(false);
+			for (const conn of connections) {
+				await syncCalendar({ connectionId: conn._id as any });
+			}
+		} catch (e) {
+			console.error("Sync error:", e);
 		}
-	};
+		setIsSyncing(false);
+	}
 
-	// Show empty state if no connections
-	if (connections !== undefined && connections.length === 0) {
+	function prevWeek() {
+		const d = new Date(baseDate);
+		d.setDate(d.getDate() - 7);
+		setBaseDate(d);
+		setSelectedDate(d);
+	}
+
+	function nextWeek() {
+		const d = new Date(baseDate);
+		d.setDate(d.getDate() + 7);
+		setBaseDate(d);
+		setSelectedDate(d);
+	}
+
+	function goToday() {
+		setBaseDate(today);
+		setSelectedDate(today);
+	}
+
+	const monthLabel = selectedDate.toLocaleDateString("en-US", {
+		month: "long",
+		year: "numeric",
+	});
+
+	// Empty state
+	if (connections.length === 0) {
 		return (
-			<DashboardLayout>
-				<div className="flex items-center justify-center h-full">
-					<div className="text-center space-y-4">
+			<DashboardLayout user={user}>
+				<div className="flex items-center justify-center h-[60vh]">
+					<div className="text-center space-y-3">
+						<Calendar className="h-12 w-12 mx-auto text-muted-foreground opacity-40" />
 						<p className="text-muted-foreground">
-							No Google accounts connected yet
+							No Google accounts connected
 						</p>
 						<Link href="/dashboard/settings">
-							<Button>Connect Google Account</Button>
+							<Button size="sm">Connect Google</Button>
 						</Link>
 					</div>
 				</div>
@@ -161,183 +160,219 @@ export default function CalendarPage() {
 	}
 
 	return (
-		<DashboardLayout>
-			<div className="flex h-full">
-				{/* Calendar View */}
-				<div className="flex-1 flex flex-col p-6">
-					<div className="flex items-center justify-between mb-6">
-						<div>
-							<h1 className="text-2xl font-bold">Calendar</h1>
-							<p className="text-sm text-muted-foreground">{currentWeek}</p>
-						</div>
-						<div className="flex items-center gap-2">
-							<Button variant="outline" size="icon">
-								<ChevronLeft className="h-4 w-4" />
-							</Button>
-							<Button variant="outline" size="sm">Today</Button>
-							<Button variant="outline" size="icon">
-								<ChevronRight className="h-4 w-4" />
-							</Button>
-							<Button
-								variant="outline"
-								size="sm"
-								onClick={handleSync}
-								disabled={isSyncing || !connections}
-							>
-								{isSyncing ? (
-									<>
-										<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-										Syncing...
-									</>
-								) : (
-									<>
-										<RefreshCw className="mr-2 h-4 w-4" />
-										Sync
-									</>
-								)}
-							</Button>
-							<Button className="ml-4 gap-2">
-								<Plus className="h-4 w-4" />
-								Add Event
-							</Button>
-						</div>
+		<DashboardLayout user={user}>
+			<div className="p-4 md:p-6 max-w-3xl mx-auto space-y-4">
+				{/* Header */}
+				<div className="flex items-center justify-between">
+					<div>
+						<h1 className="text-xl font-semibold">{monthLabel}</h1>
 					</div>
-
-					{/* Week View Grid */}
-					<div className="flex-1 border rounded-lg overflow-auto">
-						<div className="grid grid-cols-6 min-w-[800px]">
-							{/* Time column */}
-							<div className="border-r bg-muted/30">
-								<div className="h-12 border-b" />
-								{hours.map((hour) => (
-									<div key={hour} className="h-20 border-b flex items-start justify-end pr-2 pt-1">
-										<span className="text-xs text-muted-foreground">
-											{hour > 12 ? `${hour - 12}:00 PM` : `${hour}:00 AM`}
-										</span>
-									</div>
-								))}
-							</div>
-
-							{/* Day columns */}
-							{daysOfWeek.map((day, dayIndex) => (
-								<div key={day} className="border-r last:border-r-0 relative">
-									<div className="h-12 border-b flex items-center justify-center font-medium">
-										{day}
-									</div>
-									<div className="relative">
-										{hours.map((hour) => (
-											<div key={hour} className="h-20 border-b" />
-										))}
-										{/* Events for this day */}
-										{events
-											.filter((event: any) => event.day === dayIndex)
-											.map((event: any) => {
-												const topPosition = (event.startTime - 8) * 80; // 80px per hour
-												const height = event.duration * 80;
-												return (
-													<div
-														key={event.id}
-														onClick={() => setSelectedEventId(event.id)}
-														className={cn(
-															"absolute left-1 right-1 rounded p-2 cursor-pointer text-white text-xs overflow-hidden",
-															event.color,
-															selectedEvent?.id === event.id && "ring-2 ring-white ring-offset-2",
-														)}
-														style={{
-															top: `${topPosition}px`,
-															height: `${height}px`,
-														}}
-													>
-														<p className="font-medium truncate">{event.title}</p>
-														{event.attendees.length > 0 && (
-															<p className="text-[10px] opacity-90 truncate">
-																{event.attendees.join(", ")}
-															</p>
-														)}
-													</div>
-												);
-											})}
-									</div>
-								</div>
-							))}
-						</div>
+					<div className="flex items-center gap-2">
+						<button
+							type="button"
+							onClick={handleSync}
+							disabled={isSyncing}
+							className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+						>
+							{isSyncing ? (
+								<Loader2 className="h-4 w-4 animate-spin" />
+							) : (
+								<RefreshCw className="h-4 w-4" />
+							)}
+							Sync
+						</button>
 					</div>
 				</div>
 
-				{/* Event Detail Sidebar */}
-				{selectedEvent && (
-					<div className="w-[350px] border-l p-6 space-y-6">
-						<div>
-							<div className="flex items-start justify-between mb-4">
-								<div className={cn("w-3 h-3 rounded-full", selectedEvent.color)} />
-								<Button variant="ghost" size="sm" onClick={() => setSelectedEventId(null)}>
-									Close
-								</Button>
-							</div>
-							<h2 className="text-xl font-bold mb-2">{selectedEvent.title}</h2>
-							<div className="space-y-2 text-sm">
-								<div className="flex items-center gap-2 text-muted-foreground">
-									<span>🕐</span>
-									<span>
-										{daysOfWeek[selectedEvent.day]},{" "}
-										{selectedEvent.startTime > 12
-											? `${selectedEvent.startTime - 12}:00 PM`
-											: `${selectedEvent.startTime}:00 AM`}{" "}
-										- {selectedEvent.duration}h
-									</span>
-								</div>
-								{selectedEvent.attendees.length > 0 && (
-									<div className="flex items-start gap-2 text-muted-foreground">
-										<Users className="h-4 w-4 mt-0.5" />
-										<div>
-											{selectedEvent.attendees.map((attendee: any, i: number) => (
-												<div key={i}>{attendee}</div>
-											))}
+				{/* Week strip */}
+				<Card>
+					<CardContent className="p-2">
+						<div className="flex items-center justify-between px-1 mb-2">
+							<button
+								type="button"
+								onClick={prevWeek}
+								className="p-1.5 rounded-lg hover:bg-accent transition-colors text-muted-foreground"
+							>
+								<ChevronLeft className="h-4 w-4" />
+							</button>
+							<button
+								type="button"
+								onClick={goToday}
+								className="text-xs font-medium text-primary hover:underline"
+							>
+								Today
+							</button>
+							<button
+								type="button"
+								onClick={nextWeek}
+								className="p-1.5 rounded-lg hover:bg-accent transition-colors text-muted-foreground"
+							>
+								<ChevronRight className="h-4 w-4" />
+							</button>
+						</div>
+						<div className="grid grid-cols-7 gap-1">
+							{weekDates.map((date) => {
+								const isToday = isSameDay(date, today);
+								const isSelected = isSameDay(date, selectedDate);
+								const count = eventsOnDay(date);
+								return (
+									<button
+										key={date.toISOString()}
+										type="button"
+										onClick={() => setSelectedDate(date)}
+										className={cn(
+											"flex flex-col items-center py-2 rounded-xl transition-all",
+											isSelected
+												? "bg-primary text-primary-foreground"
+												: isToday
+													? "bg-accent"
+													: "hover:bg-accent",
+										)}
+									>
+										<span
+											className={cn(
+												"text-[10px] font-medium mb-0.5",
+												isSelected
+													? "text-primary-foreground/70"
+													: "text-muted-foreground",
+											)}
+										>
+											{DAY_NAMES[date.getDay()]}
+										</span>
+										<span
+											className={cn(
+												"text-sm font-semibold",
+												isSelected
+													? "text-primary-foreground"
+													: "text-foreground",
+											)}
+										>
+											{date.getDate()}
+										</span>
+										{count > 0 && (
+											<div className="flex gap-0.5 mt-1">
+												{Array.from({
+													length: Math.min(count, 3),
+												}).map((_, j) => (
+													<div
+														key={j}
+														className={cn(
+															"w-1 h-1 rounded-full",
+															isSelected
+																? "bg-primary-foreground/60"
+																: "bg-primary",
+														)}
+													/>
+												))}
+											</div>
+										)}
+									</button>
+								);
+							})}
+						</div>
+					</CardContent>
+				</Card>
+
+				{/* Day label */}
+				<div className="flex items-center gap-2">
+					<h2 className="text-sm font-semibold text-foreground">
+						{FULL_DAY_NAMES[selectedDate.getDay()]},{" "}
+						{selectedDate.toLocaleDateString("en-US", {
+							month: "short",
+							day: "numeric",
+						})}
+					</h2>
+					<span className="text-xs text-muted-foreground">
+						{dayEvents.length} event{dayEvents.length !== 1 ? "s" : ""}
+					</span>
+				</div>
+
+				{/* Events list */}
+				<div className="space-y-2">
+					{dayEvents.length === 0 ? (
+						<div className="text-center py-12 text-muted-foreground">
+							<Calendar className="h-10 w-10 mx-auto mb-2 opacity-30" />
+							<p className="text-sm">No events this day</p>
+						</div>
+					) : (
+						dayEvents.map((event: any) => (
+							<Card
+								key={event._id}
+								className={cn(
+									"cursor-pointer hover:shadow-md active:scale-[0.99] transition-all",
+									selectedEvent?._id === event._id &&
+										"ring-1 ring-primary",
+								)}
+								onClick={() =>
+									setSelectedEvent(
+										selectedEvent?._id === event._id
+											? null
+											: event,
+									)
+								}
+							>
+								<CardContent className="p-4">
+									<div className="flex items-start gap-3">
+										{/* Time column */}
+										<div className="text-right shrink-0 w-16 pt-0.5">
+											<p className="text-sm font-medium text-foreground">
+												{fmtTime(event.startTime)}
+											</p>
+											<p className="text-[10px] text-muted-foreground">
+												{fmtDuration(
+													event.startTime,
+													event.endTime,
+												)}
+											</p>
+										</div>
+
+										{/* Divider */}
+										<div className="w-0.5 self-stretch bg-primary rounded-full shrink-0" />
+
+										{/* Content */}
+										<div className="flex-1 min-w-0">
+											<h3 className="font-semibold text-sm text-foreground truncate">
+												{event.title}
+											</h3>
+											{event.location && (
+												<p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+													<MapPin className="h-3 w-3" />
+													{event.location}
+												</p>
+											)}
+											{event.attendees &&
+												event.attendees.length > 0 && (
+													<p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+														<Users className="h-3 w-3" />
+														{event.attendees
+															.slice(0, 3)
+															.join(", ")}
+														{event.attendees.length >
+															3 &&
+															` +${event.attendees.length - 3}`}
+													</p>
+												)}
+											<p className="text-[10px] text-muted-foreground mt-1">
+												{event.accountEmail}
+											</p>
+
+											{/* Expanded detail */}
+											{selectedEvent?._id ===
+												event._id &&
+												event.description && (
+													<div className="mt-3 pt-3 border-t border-border">
+														<p className="text-xs text-muted-foreground whitespace-pre-wrap">
+															{event.description}
+														</p>
+													</div>
+												)}
 										</div>
 									</div>
-								)}
-							</div>
-						</div>
-
-						{selectedEvent.prepNotes && (
-							<Card>
-								<CardHeader>
-									<CardTitle className="text-sm">Prep Notes</CardTitle>
-								</CardHeader>
-								<CardContent>
-									<p className="text-sm text-muted-foreground">
-										{selectedEvent.prepNotes}
-									</p>
 								</CardContent>
 							</Card>
-						)}
-
-						<Card>
-							<CardHeader>
-								<CardTitle className="text-sm">Related Context</CardTitle>
-							</CardHeader>
-							<CardContent className="space-y-2">
-								<div className="flex items-center justify-between text-xs">
-									<span className="text-muted-foreground">Recent emails with attendees</span>
-									<Badge variant="secondary">3</Badge>
-								</div>
-								<div className="flex items-center justify-between text-xs">
-									<span className="text-muted-foreground">Related tasks</span>
-									<Badge variant="secondary">2</Badge>
-								</div>
-								<div className="flex items-center justify-between text-xs">
-									<span className="text-muted-foreground">Previous meetings</span>
-									<Badge variant="secondary">5</Badge>
-								</div>
-							</CardContent>
-						</Card>
-
-						<div className="flex flex-col gap-2">
-							<Button variant="outline" size="sm">Edit Event</Button>
-							<Button variant="outline" size="sm">Cancel Meeting</Button>
-						</div>
-					</div>
-				)}
+						))
+					)}
+				</div>
 			</div>
 		</DashboardLayout>
 	);
