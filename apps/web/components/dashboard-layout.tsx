@@ -13,6 +13,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ChatInterface } from "@/components/chat-interface";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
 	Home,
 	Inbox,
@@ -102,13 +103,16 @@ export function DashboardLayout({ children, user }: DashboardLayoutProps) {
 
 				{/* Bottom */}
 				<div className="p-3 space-y-0.5">
-					<Link
-						href="/dashboard/settings"
-						className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground transition-all"
-					>
-						<Settings className="h-4 w-4" />
-						<span>Settings</span>
-					</Link>
+					<div className="flex items-center justify-between px-1">
+						<Link
+							href="/dashboard/settings"
+							className="flex items-center gap-2.5 rounded-xl px-2 py-2 text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground transition-all"
+						>
+							<Settings className="h-4 w-4" />
+							<span>Settings</span>
+						</Link>
+						<ThemeToggle />
+					</div>
 					<DropdownMenu>
 						<DropdownMenuTrigger asChild>
 							<button
@@ -148,12 +152,15 @@ export function DashboardLayout({ children, user }: DashboardLayoutProps) {
 						</div>
 						<span className="text-[15px] font-semibold tracking-tight">Flow</span>
 					</div>
-					<Avatar className="h-7 w-7">
-						<AvatarImage src={avatarUrl} />
-						<AvatarFallback className="text-[10px] bg-primary/10 text-primary">
-							{initials}
-						</AvatarFallback>
-					</Avatar>
+					<div className="flex items-center gap-1">
+						<ThemeToggle className="relative" />
+						<Avatar className="h-7 w-7">
+							<AvatarImage src={avatarUrl} />
+							<AvatarFallback className="text-[10px] bg-primary/10 text-primary">
+								{initials}
+							</AvatarFallback>
+						</Avatar>
+					</div>
 				</header>
 
 				{/* Content */}

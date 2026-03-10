@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ThemeProvider } from "next-themes";
 import { PostHogProvider } from "@/components/providers/posthog";
 import "./globals.css";
 
@@ -43,9 +44,11 @@ export default function RootLayout({
 	children: React.ReactNode;
 }) {
 	return (
-		<html lang="en" className="">
+		<html lang="en" suppressHydrationWarning>
 			<body>
-				<PostHogProvider>{children}</PostHogProvider>
+				<ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
+					<PostHogProvider>{children}</PostHogProvider>
+				</ThemeProvider>
 			</body>
 		</html>
 	);
