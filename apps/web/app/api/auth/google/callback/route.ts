@@ -8,17 +8,13 @@ const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI;
 const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL;
 
+function redirect(request: NextRequest, path: string) {
+	return NextResponse.redirect(new URL(path, request.nextUrl.origin));
+}
+
 export async function GET(request: NextRequest) {
-	if (
-		!GOOGLE_CLIENT_ID ||
-		!GOOGLE_CLIENT_SECRET ||
-		!GOOGLE_REDIRECT_URI ||
-		!CONVEX_URL
-	) {
-		return NextResponse.json(
-			{ error: "Google OAuth not configured" },
-			{ status: 500 },
-		);
+	if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REDIRECT_URI || !CONVEX_URL) {
+		return NextResponse.json({ error: "Google OAuth not configured", vars: { cid: !!GOOGLE_CLIENT_ID, cs: !!GOOGLE_CLIENT_SECRET, ru: !!GOOGLE_REDIRECT_URI, cu: !!CONVEX_URL }}, { status: 500 });
 	}
 
 	const searchParams = request.nextUrl.searchParams;
@@ -26,39 +22,27 @@ export async function GET(request: NextRequest) {
 	const state = searchParams.get("state");
 	const error = searchParams.get("error");
 
-	// Check for OAuth errors
 	if (error) {
-		return NextResponse.redirect(
-			`/dashboard/settings?error=${encodeURIComponent(error)}`,
-		);
+		return redirect(request, `/dashboard/settings?error=${encodeURIComponent(error)}`);
 	}
 
 	if (!code || !state) {
-		return NextResponse.redirect(
-			"/dashboard/settings?error=missing_params",
-		);
+		return redirect(request, "/dashboard/settings?error=missing_params");
 	}
 
-	// Verify state
 	const cookieStore = await cookies();
 	const storedState = cookieStore.get("google_oauth_state")?.value;
 
 	if (!storedState || storedState !== state) {
-		return NextResponse.redirect(
-			"/dashboard/settings?error=invalid_state",
-		);
+		return redirect(request, "/dashboard/settings?error=invalid_state");
 	}
 
-	// Clear state cookie
 	cookieStore.delete("google_oauth_state");
 
 	try {
-		// Exchange code for tokens
 		const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
 			method: "POST",
-			headers: {
-				"Content-Type": "application/x-www-form-urlencoded",
-			},
+			headers: { "Content-Type": "application/x-www-form-urlencoded" },
 			body: new URLSearchParams({
 				code,
 				client_id: GOOGLE_CLIENT_ID,
@@ -71,36 +55,24 @@ export async function GET(request: NextRequest) {
 		if (!tokenResponse.ok) {
 			const errorData = await tokenResponse.text();
 			console.error("Token exchange failed:", errorData);
-			return NextResponse.redirect(
-				"/dashboard/settings?error=token_exchange_failed",
-			);
+			return redirect(request, "/dashboard/settings?error=token_exchange_failed");
 		}
 
 		const tokens = await tokenResponse.json();
 
-		// Fetch user info to get email
-		const userInfoResponse = await fetch(
-			"https://www.googleapis.com/oauth2/v2/userinfo",
-			{
-				headers: {
-					Authorization: `Bearer ${tokens.access_token}`,
-				},
-			},
-		);
+		const userInfoResponse = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+			headers: { Authorization: `Bearer ${tokens.access_token}` },
+		});
 
 		if (!userInfoResponse.ok) {
-			return NextResponse.redirect(
-				"/dashboard/settings?error=userinfo_failed",
-			);
+			return redirect(request, "/dashboard/settings?error=userinfo_failed");
 		}
 
 		const userInfo = await userInfoResponse.json();
 
-		// Store tokens in Convex
 		const client = new ConvexHttpClient(CONVEX_URL);
-
 		await client.mutation(api.google.storeGoogleConnection, {
-			userId: "josh", // Hardcoded since auth is bypassed
+			userId: "josh",
 			email: userInfo.email,
 			accessToken: tokens.access_token,
 			refreshToken: tokens.refresh_token,
@@ -108,14 +80,9 @@ export async function GET(request: NextRequest) {
 			scopes: tokens.scope.split(" "),
 		});
 
-		// Redirect back to settings with success message
-		return NextResponse.redirect(
-			`/dashboard/settings?success=connected&email=${encodeURIComponent(userInfo.email)}`,
-		);
-	} catch (error) {
-		console.error("OAuth callback error:", error);
-		return NextResponse.redirect(
-			"/dashboard/settings?error=unknown_error",
-		);
+		return redirect(request, `/dashboard/settings?success=connected&email=${encodeURIComponent(userInfo.email)}`);
+	} catch (err) {
+		console.error("OAuth callback error:", err);
+		return redirect(request, "/dashboard/settings?error=unknown_error");
 	}
 }

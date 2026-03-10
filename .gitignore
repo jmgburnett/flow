@@ -45,3 +45,4 @@ agent-runner.ts
 
 # Harness evidence (screenshots, captures)
 .harness/
+.vercel
