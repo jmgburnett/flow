@@ -13,6 +13,7 @@ import {
 	Palette,
 	LogOut,
 	Link as LinkIcon,
+	Brain,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,13 @@ interface MenuOption {
 }
 
 const menuOptions: MenuOption[] = [
+	{
+		name: "Memory",
+		href: "/dashboard/memory",
+		icon: Brain,
+		description: "Notes & context",
+		color: "bg-cyan-600",
+	},
 	{
 		name: "Settings",
 		href: "/dashboard/settings",

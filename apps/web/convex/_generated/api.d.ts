@@ -13,6 +13,7 @@ import type * as devAuth from "../devAuth.js";
 import type * as functions from "../functions.js";
 import type * as google from "../google.js";
 import type * as http from "../http.js";
+import type * as memories from "../memories.js";
 import type * as seed from "../seed.js";
 import type * as sms from "../sms.js";
 
@@ -28,6 +29,7 @@ declare const fullApi: ApiFromModules<{
   functions: typeof functions;
   google: typeof google;
   http: typeof http;
+  memories: typeof memories;
   seed: typeof seed;
   sms: typeof sms;
 }>;

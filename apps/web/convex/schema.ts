@@ -152,6 +152,33 @@ export default defineSchema({
 		.index("by_from", ["from"])
 		.index("by_to", ["to"]),
 
+	// Memory / Notes
+	memories: defineTable({
+		userId: v.string(),
+		title: v.string(),
+		content: v.string(),
+		category: v.union(
+			v.literal("personal"),
+			v.literal("project"),
+			v.literal("meeting"),
+			v.literal("idea"),
+			v.literal("other"),
+		),
+		tags: v.optional(v.array(v.string())),
+		pinned: v.boolean(),
+		source: v.union(
+			v.literal("manual"),
+			v.literal("ai"),
+			v.literal("email"),
+			v.literal("recording"),
+		),
+		sourceId: v.optional(v.string()),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	}).index("by_user", ["userId"])
+		.index("by_user_and_category", ["userId", "category"])
+		.index("by_user_and_pinned", ["userId", "pinned"]),
+
 	// SMS Conversations
 	sms_conversations: defineTable({
 		userId: v.string(),
