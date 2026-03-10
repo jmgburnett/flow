@@ -2,159 +2,173 @@
 
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { DashboardLayout } from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Trash2, Mail, MessageSquare, Hash } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
 
 export default function SettingsPage() {
+	const user = { name: "Josh", email: "josh@onflourish.com" };
 	const searchParams = useSearchParams();
 	const [isSyncing, setIsSyncing] = useState<Record<string, boolean>>({});
 
-	const connections = useQuery(api.google.getGoogleConnections, {
-		userId: "josh",
-	});
+	const googleConnections = useQuery(api.google.getGoogleConnections, { userId: "josh" });
+	const slackConnections = useQuery(api.slack.getSlackConnections, { userId: "josh" });
 
 	const syncGmail = useAction(api.google.syncGmailInbox);
 	const syncCalendar = useAction(api.google.syncCalendar);
-	const deleteConnection = useMutation(api.google.deleteGoogleConnection);
+	const deleteGoogleConnection = useMutation(api.google.deleteGoogleConnection);
+
+	const syncSlack = useAction(api.slack.syncSlackMessages);
+	const deleteSlackConnection = useMutation(api.slack.deleteSlackConnection);
 
 	useEffect(() => {
 		const success = searchParams.get("success");
 		const error = searchParams.get("error");
-		const email = searchParams.get("email");
-
-		if (success === "connected" && email) {
-			// Show success message (you could add a toast notification here)
-			console.log(`Successfully connected ${email}`);
-		} else if (error) {
-			console.error(`OAuth error: ${error}`);
-		}
+		if (success) console.log("Connected:", success);
+		if (error) console.error("OAuth error:", error);
 	}, [searchParams]);
 
-	const handleConnectGoogle = () => {
-		// Redirect to Google OAuth flow
-		window.location.href = "/api/auth/google";
-	};
-
-	const handleSync = async (connectionId: Id<"google_connections">) => {
-		setIsSyncing((prev) => ({ ...prev, [connectionId]: true }));
-
+	async function handleGoogleSync(connectionId: Id<"google_connections">) {
+		setIsSyncing((p) => ({ ...p, [connectionId]: true }));
 		try {
 			await Promise.all([
 				syncGmail({ connectionId }),
 				syncCalendar({ connectionId }),
 			]);
-			console.log("Sync completed");
-		} catch (error) {
-			console.error("Sync failed:", error);
-		} finally {
-			setIsSyncing((prev) => ({ ...prev, [connectionId]: false }));
-		}
-	};
+		} catch (e) { console.error(e); }
+		setIsSyncing((p) => ({ ...p, [connectionId]: false }));
+	}
 
-	const handleDisconnect = async (connectionId: Id<"google_connections">) => {
-		if (confirm("Are you sure you want to disconnect this account?")) {
-			await deleteConnection({ connectionId });
-		}
-	};
+	async function handleSlackSync(connectionId: Id<"slack_connections">) {
+		setIsSyncing((p) => ({ ...p, [connectionId]: true }));
+		try {
+			await syncSlack({ connectionId });
+		} catch (e) { console.error(e); }
+		setIsSyncing((p) => ({ ...p, [connectionId]: false }));
+	}
 
 	return (
-		<div className="p-8">
-			<div className="max-w-4xl mx-auto space-y-8">
+		<DashboardLayout user={user}>
+			<div className="p-4 md:p-6 max-w-2xl mx-auto space-y-6">
 				<div>
-					<h1 className="text-3xl font-bold">Settings</h1>
-					<p className="text-muted-foreground mt-2">
-						Manage your connected accounts and preferences
+					<h1 className="text-xl font-semibold tracking-tight">Settings</h1>
+					<p className="text-sm text-muted-foreground mt-0.5">
+						Manage connected accounts and preferences
 					</p>
 				</div>
 
-				<Card>
-					<CardHeader>
-						<CardTitle>Connected Accounts</CardTitle>
-						<CardDescription>
-							Connect your Google accounts to sync emails and calendar events
-						</CardDescription>
-					</CardHeader>
-					<CardContent className="space-y-4">
-						{connections === undefined ? (
-							<div className="flex items-center justify-center py-8">
-								<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+				{/* Google Accounts */}
+				<div className="glass-card rounded-2xl overflow-hidden">
+					<div className="flex items-center justify-between px-5 pt-5 pb-3">
+						<div className="flex items-center gap-2.5">
+							<div className="h-8 w-8 rounded-xl bg-red-500/10 flex items-center justify-center">
+								<Mail className="h-4 w-4 text-red-500" />
 							</div>
-						) : connections.length === 0 ? (
-							<div className="text-center py-8">
-								<p className="text-muted-foreground mb-4">
-									No accounts connected yet
-								</p>
-								<Button onClick={handleConnectGoogle}>
-									<Plus className="mr-2 h-4 w-4" />
-									Connect Google Account
+							<div>
+								<h2 className="text-sm font-semibold">Google</h2>
+								<p className="text-xs text-muted-foreground">Email & Calendar</p>
+							</div>
+						</div>
+						<Button size="sm" variant="ghost" onClick={() => (window.location.href = "/api/auth/google")} className="rounded-xl gap-1.5 text-xs">
+							<Plus className="h-3.5 w-3.5" /> Add
+						</Button>
+					</div>
+					<div className="px-3 pb-3">
+						{googleConnections === undefined ? (
+							<div className="flex justify-center py-6">
+								<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+							</div>
+						) : googleConnections.length === 0 ? (
+							<div className="text-center py-6">
+								<p className="text-sm text-muted-foreground mb-3">No accounts connected</p>
+								<Button size="sm" onClick={() => (window.location.href = "/api/auth/google")} className="rounded-xl">
+									Connect Google
 								</Button>
 							</div>
 						) : (
-							<>
-								<div className="space-y-3">
-									{connections.map((connection: any) => (
-										<div
-											key={connection._id}
-											className="flex items-center justify-between p-4 border rounded-lg"
-										>
-											<div className="space-y-1">
-												<p className="font-medium">{connection.email}</p>
-												<div className="flex items-center gap-4 text-sm text-muted-foreground">
-													<span>
-														Connected:{" "}
-														{new Date(connection.connectedAt).toLocaleDateString()}
-													</span>
-													{connection.lastSyncAt && (
-														<span>
-															Last sync:{" "}
-															{new Date(connection.lastSyncAt).toLocaleString()}
-														</span>
-													)}
-												</div>
-											</div>
-											<div className="flex items-center gap-2">
-												<Button
-													variant="outline"
-													size="sm"
-													onClick={() => handleSync(connection._id)}
-													disabled={isSyncing[connection._id]}
-												>
-													{isSyncing[connection._id] ? (
-														<>
-															<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-															Syncing...
-														</>
-													) : (
-														<>
-															<RefreshCw className="mr-2 h-4 w-4" />
-															Sync Now
-														</>
-													)}
-												</Button>
-												<Button
-													variant="outline"
-													size="sm"
-													onClick={() => handleDisconnect(connection._id)}
-												>
-													<Trash2 className="h-4 w-4" />
-												</Button>
-											</div>
-										</div>
-									))}
+							googleConnections.map((conn: any) => (
+								<div key={conn._id} className="flex items-center justify-between p-3 rounded-xl hover:bg-accent/50 transition-all group">
+									<div className="min-w-0 flex-1">
+										<p className="text-sm font-medium truncate">{conn.email}</p>
+										<p className="text-[10px] text-muted-foreground">
+											{conn.lastSyncAt ? `Synced ${new Date(conn.lastSyncAt).toLocaleString()}` : "Never synced"}
+										</p>
+									</div>
+									<div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+										<Button size="sm" variant="ghost" onClick={() => handleGoogleSync(conn._id)}
+											disabled={isSyncing[conn._id]} className="h-7 w-7 p-0 rounded-lg">
+											{isSyncing[conn._id] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+										</Button>
+										<Button size="sm" variant="ghost"
+											onClick={() => confirm("Disconnect?") && deleteGoogleConnection({ connectionId: conn._id })}
+											className="h-7 w-7 p-0 rounded-lg text-muted-foreground hover:text-destructive">
+											<Trash2 className="h-3.5 w-3.5" />
+										</Button>
+									</div>
 								</div>
-								<Button onClick={handleConnectGoogle} variant="outline">
-									<Plus className="mr-2 h-4 w-4" />
-									Connect Another Account
-								</Button>
-							</>
+							))
 						)}
-					</CardContent>
-				</Card>
+					</div>
+				</div>
+
+				{/* Slack */}
+				<div className="glass-card rounded-2xl overflow-hidden">
+					<div className="flex items-center justify-between px-5 pt-5 pb-3">
+						<div className="flex items-center gap-2.5">
+							<div className="h-8 w-8 rounded-xl bg-purple-500/10 flex items-center justify-center">
+								<Hash className="h-4 w-4 text-purple-500" />
+							</div>
+							<div>
+								<h2 className="text-sm font-semibold">Slack</h2>
+								<p className="text-xs text-muted-foreground">DMs & Mentions</p>
+							</div>
+						</div>
+						<Button size="sm" variant="ghost" onClick={() => (window.location.href = "/api/auth/slack")} className="rounded-xl gap-1.5 text-xs">
+							<Plus className="h-3.5 w-3.5" /> Add
+						</Button>
+					</div>
+					<div className="px-3 pb-3">
+						{slackConnections === undefined ? (
+							<div className="flex justify-center py-6">
+								<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+							</div>
+						) : slackConnections.length === 0 ? (
+							<div className="text-center py-6">
+								<p className="text-sm text-muted-foreground mb-3">No Slack workspace connected</p>
+								<Button size="sm" onClick={() => (window.location.href = "/api/auth/slack")} className="rounded-xl">
+									Connect Slack
+								</Button>
+							</div>
+						) : (
+							slackConnections.map((conn: any) => (
+								<div key={conn._id} className="flex items-center justify-between p-3 rounded-xl hover:bg-accent/50 transition-all group">
+									<div className="min-w-0 flex-1">
+										<p className="text-sm font-medium truncate">{conn.teamName}</p>
+										<p className="text-[10px] text-muted-foreground">
+											@{conn.slackUserName} · {conn.lastSyncAt ? `Synced ${new Date(conn.lastSyncAt).toLocaleString()}` : "Never synced"}
+										</p>
+									</div>
+									<div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+										<Button size="sm" variant="ghost" onClick={() => handleSlackSync(conn._id)}
+											disabled={isSyncing[conn._id]} className="h-7 w-7 p-0 rounded-lg">
+											{isSyncing[conn._id] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+										</Button>
+										<Button size="sm" variant="ghost"
+											onClick={() => confirm("Disconnect Slack?") && deleteSlackConnection({ connectionId: conn._id })}
+											className="h-7 w-7 p-0 rounded-lg text-muted-foreground hover:text-destructive">
+											<Trash2 className="h-3.5 w-3.5" />
+										</Button>
+									</div>
+								</div>
+							))
+						)}
+					</div>
+				</div>
 			</div>
-		</div>
+		</DashboardLayout>
 	);
 }

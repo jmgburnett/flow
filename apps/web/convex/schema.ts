@@ -226,6 +226,48 @@ export default defineSchema({
 		.index("by_user_and_category", ["userId", "category"])
 		.index("by_user_and_pinned", ["userId", "pinned"]),
 
+	// Slack connections
+	slack_connections: defineTable({
+		userId: v.string(),
+		teamId: v.string(),
+		teamName: v.string(),
+		botToken: v.string(),
+		userToken: v.string(),
+		slackUserId: v.string(),
+		slackUserName: v.string(),
+		scopes: v.array(v.string()),
+		connectedAt: v.number(),
+		lastSyncAt: v.optional(v.number()),
+	}).index("by_user", ["userId"])
+		.index("by_team", ["teamId"]),
+
+	// Slack messages (DMs, mentions, unreplied)
+	slack_messages: defineTable({
+		userId: v.string(),
+		teamId: v.string(),
+		channelId: v.string(),
+		channelName: v.optional(v.string()),
+		channelType: v.union(
+			v.literal("dm"),
+			v.literal("channel"),
+			v.literal("group"),
+			v.literal("mpim"),
+		),
+		messageTs: v.string(), // Slack message timestamp (unique ID)
+		threadTs: v.optional(v.string()),
+		senderSlackId: v.string(),
+		senderName: v.string(),
+		text: v.string(),
+		isReply: v.boolean(),
+		isMention: v.boolean(),
+		needsResponse: v.boolean(),
+		respondedAt: v.optional(v.number()),
+		receivedAt: v.number(),
+	}).index("by_user", ["userId"])
+		.index("by_user_and_needs_response", ["userId", "needsResponse"])
+		.index("by_message_ts", ["messageTs"])
+		.index("by_channel", ["channelId"]),
+
 	// SMS Conversations
 	sms_conversations: defineTable({
 		userId: v.string(),
