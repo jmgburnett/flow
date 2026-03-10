@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
 	DropdownMenu,
@@ -22,6 +21,10 @@ import {
 	MoreHorizontal,
 	Settings,
 	Search,
+	Brain,
+	Users,
+	CheckSquare,
+	Mic,
 } from "lucide-react";
 
 interface DashboardLayoutProps {
@@ -33,7 +36,7 @@ interface DashboardLayoutProps {
 	};
 }
 
-const navigation = [
+const mobileNav = [
 	{ name: "Home", href: "/dashboard", icon: Home },
 	{ name: "Inbox", href: "/dashboard/inbox", icon: Inbox },
 	{ name: "Messages", href: "/dashboard/messages", icon: MessageCircle },
@@ -41,16 +44,15 @@ const navigation = [
 	{ name: "More", href: "/dashboard/more", icon: MoreHorizontal },
 ];
 
-// Desktop sidebar nav (text-based, Gloo style)
 const sidebarNav = [
-	{ name: "Home", href: "/dashboard" },
-	{ name: "Inbox", href: "/dashboard/inbox" },
-	{ name: "Messages", href: "/dashboard/messages" },
-	{ name: "Calendar", href: "/dashboard/calendar" },
-	{ name: "Memory", href: "/dashboard/memory" },
-	{ name: "People", href: "/dashboard/people" },
-	{ name: "Tasks", href: "/dashboard/tasks" },
-	{ name: "Recordings", href: "/dashboard/recordings" },
+	{ name: "Home", href: "/dashboard", icon: Home },
+	{ name: "Inbox", href: "/dashboard/inbox", icon: Inbox },
+	{ name: "Messages", href: "/dashboard/messages", icon: MessageCircle },
+	{ name: "Calendar", href: "/dashboard/calendar", icon: Calendar },
+	{ name: "Memory", href: "/dashboard/memory", icon: Brain },
+	{ name: "People", href: "/dashboard/people", icon: Users },
+	{ name: "Tasks", href: "/dashboard/tasks", icon: CheckSquare },
+	{ name: "Recordings", href: "/dashboard/recordings", icon: Mic },
 ];
 
 export function DashboardLayout({ children, user }: DashboardLayoutProps) {
@@ -61,30 +63,22 @@ export function DashboardLayout({ children, user }: DashboardLayoutProps) {
 
 	return (
 		<div className="h-screen overflow-hidden bg-background">
-			{/* Desktop sidebar — Gloo style */}
-			<aside className="hidden md:fixed md:inset-y-0 md:left-0 md:z-50 md:flex md:w-60 md:flex-col md:border-r md:border-border md:bg-sidebar">
+			{/* Desktop sidebar — glass */}
+			<aside className="hidden md:fixed md:inset-y-0 md:left-0 md:z-50 md:flex md:w-[220px] md:flex-col glass-heavy md:rounded-r-2xl">
 				{/* Brand */}
-				<div className="flex h-14 items-center gap-2.5 px-5 border-b border-border">
-					<div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary">
+				<div className="flex h-14 items-center gap-2.5 px-5">
+					<div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary shadow-sm">
 						<span className="text-sm font-bold text-primary-foreground">F</span>
 					</div>
-					<span className="text-[15px] font-semibold text-foreground">Flow</span>
-				</div>
-
-				{/* Search */}
-				<div className="px-3 pt-3 pb-1">
-					<button
-						type="button"
-						className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-muted-foreground hover:bg-accent transition-colors"
-					>
-						<Search className="h-4 w-4" />
-						<span>Search</span>
-					</button>
+					<span className="text-[15px] font-semibold tracking-tight text-foreground">
+						Flow
+					</span>
 				</div>
 
 				{/* Nav */}
-				<nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
+				<nav className="flex-1 px-3 py-1 space-y-0.5 overflow-y-auto">
 					{sidebarNav.map((item) => {
+						const Icon = item.icon;
 						const isActive =
 							pathname === item.href ||
 							(item.href !== "/dashboard" && pathname?.startsWith(item.href));
@@ -93,26 +87,24 @@ export function DashboardLayout({ children, user }: DashboardLayoutProps) {
 								key={item.name}
 								href={item.href}
 								className={cn(
-									"flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm transition-colors",
+									"flex items-center gap-2.5 rounded-xl px-3 py-2 text-[13px] transition-all",
 									isActive
-										? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+										? "bg-primary/10 text-primary font-medium"
 										: "text-muted-foreground hover:bg-accent hover:text-foreground",
 								)}
 							>
-								{isActive && (
-									<div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
-								)}
-								<span className={cn(!isActive && "ml-3.5")}>{item.name}</span>
+								<Icon className={cn("h-4 w-4", isActive && "text-primary")} />
+								<span>{item.name}</span>
 							</Link>
 						);
 					})}
 				</nav>
 
-				{/* Bottom: user + settings */}
-				<div className="border-t border-border p-3 space-y-1">
+				{/* Bottom */}
+				<div className="p-3 space-y-0.5">
 					<Link
 						href="/dashboard/settings"
-						className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+						className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground transition-all"
 					>
 						<Settings className="h-4 w-4" />
 						<span>Settings</span>
@@ -121,55 +113,18 @@ export function DashboardLayout({ children, user }: DashboardLayoutProps) {
 						<DropdownMenuTrigger asChild>
 							<button
 								type="button"
-								className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm hover:bg-accent transition-colors"
+								className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-[13px] hover:bg-accent transition-all"
 							>
-								<Avatar className="h-7 w-7">
+								<Avatar className="h-6 w-6">
 									<AvatarImage src={avatarUrl} />
-									<AvatarFallback className="text-xs bg-muted">
+									<AvatarFallback className="text-[10px] bg-primary/10 text-primary">
 										{initials}
 									</AvatarFallback>
 								</Avatar>
-								<div className="flex-1 text-left min-w-0">
-									<p className="text-sm font-medium truncate">{displayName}</p>
-								</div>
+								<span className="font-medium truncate">{displayName}</span>
 							</button>
 						</DropdownMenuTrigger>
-						<DropdownMenuContent align="start" side="top" className="w-56">
-							<DropdownMenuLabel>
-								<div className="flex flex-col space-y-1">
-									<p className="text-sm font-medium">{displayName}</p>
-									<p className="text-xs text-muted-foreground">{user?.email}</p>
-								</div>
-							</DropdownMenuLabel>
-							<DropdownMenuSeparator />
-							<DropdownMenuItem asChild>
-								<Link href="/dashboard/settings">Settings</Link>
-							</DropdownMenuItem>
-						</DropdownMenuContent>
-					</DropdownMenu>
-				</div>
-			</aside>
-
-			{/* Main content area */}
-			<div className="flex flex-col h-full md:ml-60">
-				{/* Mobile top bar */}
-				<header className="flex md:hidden h-14 shrink-0 items-center justify-between border-b border-border bg-card px-4">
-					<div className="flex items-center gap-2">
-						<div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary">
-							<span className="text-sm font-bold text-primary-foreground">F</span>
-						</div>
-						<span className="text-[15px] font-semibold">Flow</span>
-					</div>
-					<DropdownMenu>
-						<DropdownMenuTrigger asChild>
-							<Button variant="ghost" className="relative h-8 w-8 rounded-full">
-								<Avatar className="h-8 w-8">
-									<AvatarImage src={avatarUrl} />
-									<AvatarFallback className="text-xs">{initials}</AvatarFallback>
-								</Avatar>
-							</Button>
-						</DropdownMenuTrigger>
-						<DropdownMenuContent align="end">
+						<DropdownMenuContent align="start" side="top" className="w-56 glass-heavy rounded-xl">
 							<DropdownMenuLabel>
 								<p className="text-sm font-medium">{displayName}</p>
 								<p className="text-xs text-muted-foreground">{user?.email}</p>
@@ -180,19 +135,38 @@ export function DashboardLayout({ children, user }: DashboardLayoutProps) {
 							</DropdownMenuItem>
 						</DropdownMenuContent>
 					</DropdownMenu>
+				</div>
+			</aside>
+
+			{/* Main content */}
+			<div className="flex flex-col h-full md:ml-[220px]">
+				{/* Mobile header — glass */}
+				<header className="flex md:hidden h-12 shrink-0 items-center justify-between px-4 glass-heavy">
+					<div className="flex items-center gap-2">
+						<div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary shadow-sm">
+							<span className="text-xs font-bold text-primary-foreground">F</span>
+						</div>
+						<span className="text-[15px] font-semibold tracking-tight">Flow</span>
+					</div>
+					<Avatar className="h-7 w-7">
+						<AvatarImage src={avatarUrl} />
+						<AvatarFallback className="text-[10px] bg-primary/10 text-primary">
+							{initials}
+						</AvatarFallback>
+					</Avatar>
 				</header>
 
-				{/* Scrollable page content */}
+				{/* Content */}
 				<main className="flex-1 overflow-y-auto overflow-x-hidden pb-24 md:pb-6">
 					{children}
 				</main>
 			</div>
 
-			{/* Mobile bottom nav — pill style */}
+			{/* Mobile bottom nav — frosted glass bar */}
 			<nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden">
-				<div className="mx-4 mb-4 rounded-2xl border border-border bg-card/95 backdrop-blur-lg shadow-lg">
-					<div className="flex items-center justify-around px-2 py-2">
-						{navigation.map((item) => {
+				<div className="mx-3 mb-3 rounded-2xl glass-heavy shadow-lg">
+					<div className="flex items-center justify-around px-1 py-1.5">
+						{mobileNav.map((item) => {
 							const Icon = item.icon;
 							const isActive =
 								pathname === item.href ||
@@ -202,16 +176,14 @@ export function DashboardLayout({ children, user }: DashboardLayoutProps) {
 									key={item.name}
 									href={item.href}
 									className={cn(
-										"flex flex-col items-center gap-1 rounded-xl px-4 py-2 transition-all min-w-[56px]",
+										"flex flex-col items-center gap-0.5 rounded-xl px-3 py-1.5 transition-all min-w-[52px]",
 										isActive
-											? "bg-primary text-primary-foreground"
+											? "bg-primary/10 text-primary"
 											: "text-muted-foreground",
 									)}
 								>
-									<Icon className={cn("h-5 w-5", isActive && "fill-current")} />
-									{isActive && (
-										<span className="text-[10px] font-medium">{item.name}</span>
-									)}
+									<Icon className="h-5 w-5" />
+									<span className={cn("text-[10px] font-medium", !isActive && "opacity-0")}>{item.name}</span>
 								</Link>
 							);
 						})}
