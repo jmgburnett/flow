@@ -1,37 +1,55 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { MessageSquare, X, Send } from "lucide-react";
+import { MessageSquare, X, Send, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 export function ChatInterface() {
 	const [isOpen, setIsOpen] = useState(false);
 	const [message, setMessage] = useState("");
-	const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([
+	const [messages, setMessages] = useState<
+		Array<{ role: "user" | "assistant"; content: string; time: string }>
+	>([
 		{
 			role: "assistant",
-			content: "Hi Josh! I'm Flobot, your AI Chief of Staff. How can I help you today?",
+			content:
+				"Hi Josh! I'm Flobot, your AI Chief of Staff. How can I help you today?",
+			time: formatTime(new Date()),
 		},
 	]);
+	const messagesEndRef = useRef<HTMLDivElement>(null);
+
+	function formatTime(date: Date) {
+		return date.toLocaleTimeString("en-US", {
+			hour: "numeric",
+			minute: "2-digit",
+		});
+	}
+
+	useEffect(() => {
+		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+	}, [messages]);
 
 	const handleSend = async () => {
 		if (!message.trim()) return;
-
-		// Add user message
 		const userMessage = message;
-		setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+		setMessages((prev) => [
+			...prev,
+			{ role: "user", content: userMessage, time: formatTime(new Date()) },
+		]);
 		setMessage("");
 
 		// TODO: Call Convex chat action
-		// For now, just add a mock response
 		setTimeout(() => {
 			setMessages((prev) => [
 				...prev,
 				{
 					role: "assistant",
-					content: "I'm here to help! (Chat integration coming soon with Convex backend)",
+					content:
+						"I'm here to help! Chat integration coming soon with the Convex backend.",
+					time: formatTime(new Date()),
 				},
 			]);
 		}, 500);
@@ -39,81 +57,131 @@ export function ChatInterface() {
 
 	if (!isOpen) {
 		return (
-			<Button
+			<button
+				type="button"
 				onClick={() => setIsOpen(true)}
-				className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg bg-gradient-to-br from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700"
-				size="icon"
+				className="fixed bottom-24 right-4 md:bottom-6 md:right-6 h-12 w-12 rounded-full shadow-lg bg-primary hover:bg-primary/90 text-primary-foreground flex items-center justify-center transition-all active:scale-95 z-50"
 			>
-				<MessageSquare className="h-6 w-6" />
-			</Button>
+				<MessageSquare className="h-5 w-5" />
+			</button>
 		);
 	}
 
 	return (
-		<div className="fixed bottom-6 right-6 w-96 h-[600px] bg-background border rounded-lg shadow-2xl flex flex-col z-50">
+		<div className="fixed inset-0 md:inset-auto md:bottom-6 md:right-6 md:w-[400px] md:h-[600px] bg-background md:border md:border-border md:rounded-2xl md:shadow-xl flex flex-col z-50">
 			{/* Header */}
-			<div className="flex items-center justify-between p-4 border-b bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-t-lg">
-				<div className="flex items-center gap-2">
-					<div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/20">
-						<MessageSquare className="h-5 w-5" />
-					</div>
+			<div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card md:rounded-t-2xl">
+				<div className="flex items-center gap-3">
+					<Avatar className="h-8 w-8">
+						<AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
+							F
+						</AvatarFallback>
+					</Avatar>
 					<div>
-						<p className="font-semibold">Flobot</p>
-						<p className="text-xs text-blue-100">AI Chief of Staff</p>
+						<p className="text-sm font-semibold text-foreground">
+							Flobot
+						</p>
+						<p className="text-xs text-muted-foreground">
+							AI Chief of Staff
+						</p>
 					</div>
 				</div>
-				<Button
-					variant="ghost"
-					size="icon"
+				<button
+					type="button"
 					onClick={() => setIsOpen(false)}
-					className="text-white hover:bg-white/20"
+					className="p-1.5 rounded-lg hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
 				>
 					<X className="h-5 w-5" />
-				</Button>
+				</button>
 			</div>
 
-			{/* Messages */}
-			<div className="flex-1 p-4 overflow-auto space-y-4">
+			{/* Messages — Gloo chat style */}
+			<div className="flex-1 px-4 py-4 overflow-y-auto space-y-4 bg-background">
 				{messages.map((msg, i) => (
-					<div
-						key={i}
-						className={cn(
-							"flex",
-							msg.role === "user" ? "justify-end" : "justify-start",
+					<div key={i}>
+						{msg.role === "user" ? (
+							/* User message — right-aligned warm cream bubble */
+							<div className="flex flex-col items-end">
+								<div className="flex items-center gap-2 mb-1">
+									<span className="text-xs text-muted-foreground">
+										{msg.time}
+									</span>
+									<span className="text-xs font-medium text-foreground">
+										Josh
+									</span>
+									<Avatar className="h-5 w-5">
+										<AvatarFallback className="text-[10px] bg-muted">
+											J
+										</AvatarFallback>
+									</Avatar>
+								</div>
+								<div className="max-w-[80%] rounded-2xl rounded-tr-md px-4 py-2.5 bg-[color:var(--chat-user-bubble)] text-[color:var(--chat-user-text)]">
+									<p className="text-sm leading-relaxed">
+										{msg.content}
+									</p>
+								</div>
+							</div>
+						) : (
+							/* AI message — left-aligned, no bubble (Gloo style) */
+							<div className="flex flex-col items-start">
+								<div className="flex items-center gap-2 mb-1">
+									<Avatar className="h-5 w-5">
+										<AvatarFallback className="text-[10px] bg-primary text-primary-foreground">
+											F
+										</AvatarFallback>
+									</Avatar>
+									<span className="text-xs font-medium text-foreground">
+										Flobot
+									</span>
+									<span className="text-xs text-muted-foreground">
+										{msg.time}
+									</span>
+								</div>
+								<div className="max-w-[90%] pl-7">
+									<p className="text-sm leading-relaxed text-foreground">
+										{msg.content}
+									</p>
+								</div>
+							</div>
 						)}
-					>
-						<div
-							className={cn(
-								"max-w-[80%] rounded-lg px-4 py-2",
-								msg.role === "user"
-									? "bg-blue-600 text-white"
-									: "bg-muted text-foreground",
-							)}
-						>
-							<p className="text-sm">{msg.content}</p>
-						</div>
 					</div>
 				))}
+				<div ref={messagesEndRef} />
 			</div>
 
-			{/* Input */}
-			<div className="p-4 border-t">
+			{/* Input — Gloo style bar */}
+			<div className="px-4 pb-4 pt-2 border-t border-border bg-card md:rounded-b-2xl">
 				<form
 					onSubmit={(e) => {
 						e.preventDefault();
 						handleSend();
 					}}
-					className="flex gap-2"
+					className="flex items-center gap-2"
 				>
-					<Input
+					<button
+						type="button"
+						className="p-2 rounded-lg hover:bg-accent transition-colors text-muted-foreground"
+					>
+						<Plus className="h-4 w-4" />
+					</button>
+					<input
 						value={message}
 						onChange={(e) => setMessage(e.target.value)}
-						placeholder="Ask Flobot anything..."
-						className="flex-1"
+						placeholder="Ask me anything..."
+						className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none py-2"
 					/>
-					<Button type="submit" size="icon">
+					<button
+						type="submit"
+						disabled={!message.trim()}
+						className={cn(
+							"p-2 rounded-lg transition-colors",
+							message.trim()
+								? "bg-primary text-primary-foreground hover:bg-primary/90"
+								: "text-muted-foreground",
+						)}
+					>
 						<Send className="h-4 w-4" />
-					</Button>
+					</button>
 				</form>
 			</div>
 		</div>

@@ -20,6 +20,8 @@ import {
 	Calendar,
 	MessageCircle,
 	MoreHorizontal,
+	Settings,
+	Search,
 } from "lucide-react";
 
 interface DashboardLayoutProps {
@@ -39,75 +41,138 @@ const navigation = [
 	{ name: "More", href: "/dashboard/more", icon: MoreHorizontal },
 ];
 
+// Desktop sidebar nav (text-based, Gloo style)
+const sidebarNav = [
+	{ name: "Home", href: "/dashboard" },
+	{ name: "Inbox", href: "/dashboard/inbox" },
+	{ name: "Messages", href: "/dashboard/messages" },
+	{ name: "Calendar", href: "/dashboard/calendar" },
+	{ name: "Memory", href: "/dashboard/memory" },
+	{ name: "People", href: "/dashboard/people" },
+	{ name: "Tasks", href: "/dashboard/tasks" },
+	{ name: "Recordings", href: "/dashboard/recordings" },
+];
+
 export function DashboardLayout({ children, user }: DashboardLayoutProps) {
 	const pathname = usePathname();
 	const displayName = user?.name || user?.email || "User";
 	const avatarUrl = user?.image || undefined;
 	const initials = user?.name?.[0] || user?.email?.[0]?.toUpperCase() || "U";
 
-	const getGreeting = () => {
-		const hour = new Date().getHours();
-		if (hour < 12) return "Good morning";
-		if (hour < 18) return "Good afternoon";
-		return "Good evening";
-	};
-
 	return (
 		<div className="h-screen overflow-hidden bg-background">
-			{/* Desktop sidebar — fixed left */}
-			<aside className="hidden md:fixed md:inset-y-0 md:left-0 md:z-50 md:flex md:w-20 md:flex-col md:border-r md:bg-slate-950">
-				<div className="flex h-14 items-center justify-center border-b border-slate-800">
-					<span className="text-xl font-bold text-blue-400">F</span>
+			{/* Desktop sidebar — Gloo style */}
+			<aside className="hidden md:fixed md:inset-y-0 md:left-0 md:z-50 md:flex md:w-60 md:flex-col md:border-r md:border-border md:bg-sidebar">
+				{/* Brand */}
+				<div className="flex h-14 items-center gap-2.5 px-5 border-b border-border">
+					<div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary">
+						<span className="text-sm font-bold text-primary-foreground">F</span>
+					</div>
+					<span className="text-[15px] font-semibold text-foreground">Flow</span>
 				</div>
-				<nav className="flex flex-1 flex-col items-center gap-2 py-4">
-					{navigation.map((item) => {
-						const Icon = item.icon;
-						const isActive = pathname === item.href ||
+
+				{/* Search */}
+				<div className="px-3 pt-3 pb-1">
+					<button
+						type="button"
+						className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-muted-foreground hover:bg-accent transition-colors"
+					>
+						<Search className="h-4 w-4" />
+						<span>Search</span>
+					</button>
+				</div>
+
+				{/* Nav */}
+				<nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
+					{sidebarNav.map((item) => {
+						const isActive =
+							pathname === item.href ||
 							(item.href !== "/dashboard" && pathname?.startsWith(item.href));
 						return (
 							<Link
 								key={item.name}
 								href={item.href}
 								className={cn(
-									"flex h-12 w-12 items-center justify-center rounded-lg transition-colors group relative",
+									"flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm transition-colors",
 									isActive
-										? "bg-blue-600 text-white"
-										: "text-slate-400 hover:bg-slate-800 hover:text-white",
+										? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+										: "text-muted-foreground hover:bg-accent hover:text-foreground",
 								)}
-								title={item.name}
 							>
-								<Icon className="h-5 w-5" />
-								<span className="absolute left-full ml-2 px-2 py-1 rounded bg-slate-800 text-white text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity">
-									{item.name}
-								</span>
+								{isActive && (
+									<div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+								)}
+								<span className={cn(!isActive && "ml-3.5")}>{item.name}</span>
 							</Link>
 						);
 					})}
 				</nav>
-			</aside>
 
-			{/* Main content area — offset on desktop */}
-			<div className="flex flex-col h-full md:ml-20">
-				{/* Top bar */}
-				<header className="flex h-14 shrink-0 items-center justify-between border-b bg-background px-4 md:px-6">
-					<h1 className="text-lg font-semibold md:text-xl truncate">
-						{getGreeting()}, {user?.name || "Josh"}
-					</h1>
+				{/* Bottom: user + settings */}
+				<div className="border-t border-border p-3 space-y-1">
+					<Link
+						href="/dashboard/settings"
+						className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+					>
+						<Settings className="h-4 w-4" />
+						<span>Settings</span>
+					</Link>
 					<DropdownMenu>
 						<DropdownMenuTrigger asChild>
-							<Button variant="ghost" className="relative h-9 w-9 rounded-full shrink-0">
-								<Avatar className="h-9 w-9">
+							<button
+								type="button"
+								className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm hover:bg-accent transition-colors"
+							>
+								<Avatar className="h-7 w-7">
 									<AvatarImage src={avatarUrl} />
-									<AvatarFallback>{initials}</AvatarFallback>
+									<AvatarFallback className="text-xs bg-muted">
+										{initials}
+									</AvatarFallback>
 								</Avatar>
-							</Button>
+								<div className="flex-1 text-left min-w-0">
+									<p className="text-sm font-medium truncate">{displayName}</p>
+								</div>
+							</button>
 						</DropdownMenuTrigger>
-						<DropdownMenuContent align="end">
+						<DropdownMenuContent align="start" side="top" className="w-56">
 							<DropdownMenuLabel>
 								<div className="flex flex-col space-y-1">
 									<p className="text-sm font-medium">{displayName}</p>
 									<p className="text-xs text-muted-foreground">{user?.email}</p>
 								</div>
+							</DropdownMenuLabel>
+							<DropdownMenuSeparator />
+							<DropdownMenuItem asChild>
+								<Link href="/dashboard/settings">Settings</Link>
+							</DropdownMenuItem>
+						</DropdownMenuContent>
+					</DropdownMenu>
+				</div>
+			</aside>
+
+			{/* Main content area */}
+			<div className="flex flex-col h-full md:ml-60">
+				{/* Mobile top bar */}
+				<header className="flex md:hidden h-14 shrink-0 items-center justify-between border-b border-border bg-card px-4">
+					<div className="flex items-center gap-2">
+						<div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary">
+							<span className="text-sm font-bold text-primary-foreground">F</span>
+						</div>
+						<span className="text-[15px] font-semibold">Flow</span>
+					</div>
+					<DropdownMenu>
+						<DropdownMenuTrigger asChild>
+							<Button variant="ghost" className="relative h-8 w-8 rounded-full">
+								<Avatar className="h-8 w-8">
+									<AvatarImage src={avatarUrl} />
+									<AvatarFallback className="text-xs">{initials}</AvatarFallback>
+								</Avatar>
+							</Button>
+						</DropdownMenuTrigger>
+						<DropdownMenuContent align="end">
+							<DropdownMenuLabel>
+								<p className="text-sm font-medium">{displayName}</p>
+								<p className="text-xs text-muted-foreground">{user?.email}</p>
 							</DropdownMenuLabel>
 							<DropdownMenuSeparator />
 							<DropdownMenuItem asChild>
@@ -125,23 +190,28 @@ export function DashboardLayout({ children, user }: DashboardLayoutProps) {
 
 			{/* Mobile bottom nav — pill style */}
 			<nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden">
-				<div className="mx-4 mb-4 rounded-full border bg-background/95 backdrop-blur-lg shadow-lg">
+				<div className="mx-4 mb-4 rounded-2xl border border-border bg-card/95 backdrop-blur-lg shadow-lg">
 					<div className="flex items-center justify-around px-2 py-2">
 						{navigation.map((item) => {
 							const Icon = item.icon;
-							const isActive = pathname === item.href ||
+							const isActive =
+								pathname === item.href ||
 								(item.href !== "/dashboard" && pathname?.startsWith(item.href));
 							return (
 								<Link
 									key={item.name}
 									href={item.href}
 									className={cn(
-										"flex flex-col items-center gap-1 rounded-full px-4 py-2 transition-all min-w-[56px]",
-										isActive ? "bg-blue-600 text-white" : "text-muted-foreground",
+										"flex flex-col items-center gap-1 rounded-xl px-4 py-2 transition-all min-w-[56px]",
+										isActive
+											? "bg-primary text-primary-foreground"
+											: "text-muted-foreground",
 									)}
 								>
-									<Icon className={cn("h-5 w-5", isActive ? "fill-current" : "")} />
-									{isActive && <span className="text-[10px] font-medium">{item.name}</span>}
+									<Icon className={cn("h-5 w-5", isActive && "fill-current")} />
+									{isActive && (
+										<span className="text-[10px] font-medium">{item.name}</span>
+									)}
 								</Link>
 							);
 						})}
