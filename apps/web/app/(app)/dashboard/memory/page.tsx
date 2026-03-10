@@ -111,13 +111,13 @@ export default function MemoryPage() {
 	const togglePin = useMutation(api.memories.togglePin);
 
 	// Filter by search
-	const filteredMemories = memories?.filter((m) => {
+	const filteredMemories = memories?.filter((m: any) => {
 		if (!searchQuery) return true;
 		const q = searchQuery.toLowerCase();
 		return (
 			m.title.toLowerCase().includes(q) ||
 			m.content.toLowerCase().includes(q) ||
-			m.tags?.some((t) => t.toLowerCase().includes(q))
+			m.tags?.some((t: string) => t.toLowerCase().includes(q))
 		);
 	});
 
@@ -266,7 +266,7 @@ export default function MemoryPage() {
 							</p>
 						</div>
 					) : (
-						filteredMemories.map((memory) => (
+						filteredMemories.map((memory: any) => (
 							<Card
 								key={memory._id}
 								className="cursor-pointer transition-all hover:shadow-md active:scale-[0.99]"
@@ -296,7 +296,7 @@ export default function MemoryPage() {
 												>
 													{memory.category}
 												</Badge>
-												{memory.tags?.slice(0, 3).map((tag) => (
+												{memory.tags?.slice(0, 3).map((tag: string) => (
 													<Badge
 														key={tag}
 														variant="outline"

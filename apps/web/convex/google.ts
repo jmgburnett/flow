@@ -530,6 +530,221 @@ export const syncCalendar = action({
 	},
 });
 
+// Update draft reply on an email
+export const updateDraftReply = mutation({
+	args: {
+		emailId: v.id("emails"),
+		draftReply: v.string(),
+	},
+	handler: async (ctx, args) => {
+		await ctx.db.patch(args.emailId, {
+			draftReply: args.draftReply,
+		});
+	},
+});
+
+// Update email triage status
+export const updateTriageStatus = mutation({
+	args: {
+		emailId: v.id("emails"),
+		triageStatus: v.union(
+			v.literal("needs_me"),
+			v.literal("draft_ready"),
+			v.literal("handled"),
+			v.literal("ignore"),
+		),
+	},
+	handler: async (ctx, args) => {
+		await ctx.db.patch(args.emailId, {
+			triageStatus: args.triageStatus,
+		});
+	},
+});
+
+// Internal query to get email by ID
+export const getEmailById = internalQuery({
+	args: { emailId: v.id("emails") },
+	handler: async (ctx, args) => {
+		return await ctx.db.get(args.emailId);
+	},
+});
+
+// Internal query to get connection by email
+export const getConnectionByEmail = internalQuery({
+	args: { email: v.string() },
+	handler: async (ctx, args) => {
+		return await ctx.db
+			.query("google_connections")
+			.withIndex("by_email", (q) => q.eq("email", args.email))
+			.first();
+	},
+});
+
+// Send reply to an email via Gmail API
+export const sendReply = action({
+	args: {
+		emailId: v.id("emails"),
+		replyBody: v.string(),
+	},
+	handler: async (ctx, args) => {
+		// Get the email we're replying to
+		const email = await ctx.runQuery(internal.google.getEmailById, {
+			emailId: args.emailId,
+		});
+		if (!email) throw new Error("Email not found");
+
+		// Get the connection for this account email
+		const connection = await ctx.runQuery(internal.google.getConnectionByEmail, {
+			email: email.accountEmail,
+		});
+		if (!connection) throw new Error("No Google connection for this account");
+
+		// Get fresh access token
+		const accessToken = await refreshTokenIfNeeded(ctx, connection._id);
+
+		// Build the RFC 2822 email message
+		const replyTo = email.from;
+		const subject = email.subject.startsWith("Re:")
+			? email.subject
+			: `Re: ${email.subject}`;
+
+		// Extract the email address from "Name <email>" format
+		const toMatch = replyTo.match(/<(.+?)>/);
+		const toAddress = toMatch ? toMatch[1] : replyTo;
+
+		const rawMessage = [
+			`From: ${email.accountEmail}`,
+			`To: ${toAddress}`,
+			`Subject: ${subject}`,
+			email.threadId ? `In-Reply-To: ${email.gmailMessageId}` : "",
+			email.threadId ? `References: ${email.gmailMessageId}` : "",
+			"Content-Type: text/plain; charset=utf-8",
+			"",
+			args.replyBody,
+		]
+			.filter(Boolean)
+			.join("\r\n");
+
+		// Base64url encode the message
+		const encodedMessage = btoa(unescape(encodeURIComponent(rawMessage)))
+			.replace(/\+/g, "-")
+			.replace(/\//g, "_")
+			.replace(/=+$/, "");
+
+		// Send via Gmail API
+		const sendUrl = email.threadId
+			? `https://gmail.googleapis.com/gmail/v1/users/me/messages/send`
+			: `https://gmail.googleapis.com/gmail/v1/users/me/messages/send`;
+
+		const sendResponse = await fetch(sendUrl, {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${accessToken}`,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({
+				raw: encodedMessage,
+				threadId: email.threadId,
+			}),
+		});
+
+		if (!sendResponse.ok) {
+			const errorText = await sendResponse.text();
+			throw new Error(`Failed to send email: ${errorText}`);
+		}
+
+		// Mark the original email as handled
+		await ctx.runMutation(internal.google.markEmailHandled, {
+			emailId: args.emailId,
+		});
+
+		return { success: true };
+	},
+});
+
+// Internal mutation to mark email as handled after sending reply
+export const markEmailHandled = internalMutation({
+	args: { emailId: v.id("emails") },
+	handler: async (ctx, args) => {
+		await ctx.db.patch(args.emailId, {
+			triageStatus: "handled",
+		});
+	},
+});
+
+// Generate AI draft reply for an email
+export const generateDraftReply = action({
+	args: {
+		emailId: v.id("emails"),
+	},
+	handler: async (ctx, args): Promise<{ draft: string }> => {
+		const email = await ctx.runQuery(internal.google.getEmailById, {
+			emailId: args.emailId,
+		});
+		if (!email) throw new Error("Email not found");
+
+		const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+		if (!ANTHROPIC_API_KEY) {
+			throw new Error("ANTHROPIC_API_KEY not configured");
+		}
+
+		const resp = await fetch("https://api.anthropic.com/v1/messages", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"x-api-key": ANTHROPIC_API_KEY,
+				"anthropic-version": "2023-06-01",
+			},
+			body: JSON.stringify({
+				model: "claude-3-haiku-20240307",
+				max_tokens: 1000,
+				messages: [
+					{
+						role: "user",
+						content: `You are drafting an email reply for Josh Burnett (Head of AI Product at Gloo, founder of Church.tech). Write a professional, concise reply. Only output the reply body — no subject line, no "Dear", just the natural response text. Keep it brief and direct.
+
+Original email:
+From: ${email.from}
+Subject: ${email.subject}
+Body: ${email.body.slice(0, 2000)}
+
+Draft a reply:`,
+					},
+				],
+			}),
+		});
+
+		if (!resp.ok) {
+			throw new Error(`Claude API error: ${await resp.text()}`);
+		}
+
+		const respData: { content: Array<{ text: string }> } = await resp.json();
+		const draft: string = respData.content[0].text.trim();
+
+		// Save the draft
+		await ctx.runMutation(internal.google.saveDraftReply, {
+			emailId: args.emailId,
+			draftReply: draft,
+		});
+
+		return { draft };
+	},
+});
+
+// Internal mutation to save draft reply
+export const saveDraftReply = internalMutation({
+	args: {
+		emailId: v.id("emails"),
+		draftReply: v.string(),
+	},
+	handler: async (ctx, args) => {
+		await ctx.db.patch(args.emailId, {
+			draftReply: args.draftReply,
+			triageStatus: "draft_ready",
+		});
+	},
+});
+
 // Helper function to triage emails using Claude
 async function triageEmailWithClaude(
 	subject: string,

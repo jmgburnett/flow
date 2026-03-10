@@ -8,9 +8,11 @@ import { Calendar, Mail, MessageCircle, CheckSquare, Clock } from "lucide-react"
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 function DashboardContent() {
   const user = { name: "Josh", email: "josh@onflourish.com" };
+  const router = useRouter();
 
   const emails = useQuery(api.google.getEmails, { userId: "josh" }) ?? [];
   const calendarEvents = useQuery(api.google.getCalendarEvents, {
@@ -91,7 +93,12 @@ function DashboardContent() {
               <p className="text-sm text-muted-foreground">All caught up! 🎉</p>
             ) : (
               needsMe.slice(0, 4).map((email: any) => (
-                <div key={email._id} className="flex items-start gap-3 pb-3 last:pb-0 border-b last:border-0 min-w-0">
+                <button
+                  key={email._id}
+                  type="button"
+                  onClick={() => router.push(`/dashboard/inbox?email=${email._id}`)}
+                  className="flex items-start gap-3 pb-3 last:pb-0 border-b last:border-0 min-w-0 w-full text-left hover:bg-muted/50 rounded-md transition-colors -mx-1 px-1"
+                >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
                       <p className="font-medium text-sm truncate flex-1">{email.from.split("<")[0].trim()}</p>
@@ -100,7 +107,7 @@ function DashboardContent() {
                     <p className="text-sm text-muted-foreground truncate">{email.subject}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">{email.accountEmail}</p>
                   </div>
-                </div>
+                </button>
               ))
             )}
           </CardContent>
