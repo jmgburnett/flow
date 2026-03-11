@@ -26,6 +26,7 @@ import {
 	Users,
 	CheckSquare,
 	Mic,
+	Network,
 } from "lucide-react";
 
 interface DashboardLayoutProps {
@@ -52,6 +53,7 @@ const sidebarNav = [
 	{ name: "Calendar", href: "/dashboard/calendar", icon: Calendar },
 	{ name: "Memory", href: "/dashboard/memory", icon: Brain },
 	{ name: "People", href: "/dashboard/people", icon: Users },
+	{ name: "Team", href: "/dashboard/team", icon: Network },
 	{ name: "Tasks", href: "/dashboard/tasks", icon: CheckSquare },
 	{ name: "Recordings", href: "/dashboard/recordings", icon: Mic },
 ];
