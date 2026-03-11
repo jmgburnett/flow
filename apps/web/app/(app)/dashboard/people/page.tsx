@@ -588,6 +588,33 @@ export default function PeoplePage() {
 													</div>
 												)}
 
+												{/* Team-enriched data: personality + skills */}
+												{(contact.type === "coworker" || contact.type === "team_member") && (
+													<>
+														{contact.personality && (contact.personality.mbti || contact.personality.enneagram || contact.personality.disc) && (
+															<div className="flex gap-1 mt-1.5 overflow-hidden">
+																{contact.personality.mbti && (
+																	<span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">{contact.personality.mbti}</span>
+																)}
+																{contact.personality.enneagram && (
+																	<span className="text-[10px] px-1.5 py-0.5 rounded-full bg-cyan-100 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400">{contact.personality.enneagram}</span>
+																)}
+																{contact.personality.disc && (
+																	<span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">DISC: {contact.personality.disc}</span>
+																)}
+															</div>
+														)}
+														{contact.skills && contact.skills.length > 0 && (
+															<div className="flex items-center gap-1 mt-1">
+																<span className="text-[10px] text-muted-foreground">🎯 {contact.skills.length} skill{contact.skills.length !== 1 ? "s" : ""}</span>
+																{contact.department && (
+																	<span className="text-[10px] text-muted-foreground">· 🏢 {contact.department}</span>
+																)}
+															</div>
+														)}
+													</>
+												)}
+
 												{/* Stats row */}
 												<div className="flex items-center gap-3 mt-1.5 text-[10px] text-muted-foreground">
 													{(profile?.emailsSent ?? 0) > 0 && (
