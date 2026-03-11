@@ -126,6 +126,24 @@ export default defineSchema({
 		interactionCount: v.optional(v.number()),
 		notes: v.optional(v.string()),
 		sources: v.optional(v.array(v.string())), // e.g. ["email", "calendar", "sms"]
+		// TeamOS extensions
+		reportingTo: v.optional(v.id("contacts")),
+		directReports: v.optional(v.array(v.id("contacts"))),
+		skills: v.optional(v.array(v.object({
+			skillId: v.id("skills"),
+			level: v.union(v.literal("beginner"), v.literal("intermediate"), v.literal("advanced"), v.literal("expert")),
+			isGap: v.optional(v.boolean()),
+		}))),
+		personality: v.optional(v.object({
+			enneagram: v.optional(v.string()),
+			mbti: v.optional(v.string()),
+			disc: v.optional(v.string()),
+			leadershipStyle: v.optional(v.string()),
+			workingStyle: v.optional(v.string()),
+		})),
+		department: v.optional(v.string()),
+		location: v.optional(v.string()),
+		jobDescription: v.optional(v.string()),
 		createdAt: v.number(),
 		updatedAt: v.number(),
 	}).index("by_user", ["userId"])
@@ -362,6 +380,73 @@ export default defineSchema({
 		createdAt: v.number(),
 		updatedAt: v.number(),
 	}).index("by_user", ["userId"]),
+
+	// ─── TeamOS Tables ───
+
+	// Global skill library
+	skills: defineTable({
+		name: v.string(),
+		category: v.union(
+			v.literal("leadership"),
+			v.literal("communication"),
+			v.literal("strategic"),
+			v.literal("technical"),
+			v.literal("interpersonal"),
+			v.literal("custom"),
+		),
+		description: v.optional(v.string()),
+		createdBy: v.optional(v.string()),
+	}).index("by_category", ["category"])
+		.searchIndex("search_name", { searchField: "name" }),
+
+	// OKR objectives
+	objectives: defineTable({
+		userId: v.string(),
+		title: v.string(),
+		description: v.optional(v.string()),
+		status: v.union(v.literal("active"), v.literal("completed"), v.literal("archived")),
+		ragStatus: v.union(v.literal("green"), v.literal("amber"), v.literal("red"), v.literal("not_started")),
+		startDate: v.number(),
+		endDate: v.number(),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	}).index("by_user", ["userId"])
+		.index("by_user_and_status", ["userId", "status"]),
+
+	// Key results under objectives
+	key_results: defineTable({
+		objectiveId: v.id("objectives"),
+		userId: v.string(),
+		title: v.string(),
+		targetValue: v.number(),
+		currentValue: v.number(),
+		unit: v.optional(v.string()),
+		ownerId: v.optional(v.id("contacts")),
+		ownerName: v.optional(v.string()),
+		status: v.union(v.literal("on_track"), v.literal("at_risk"), v.literal("behind"), v.literal("completed")),
+		deadline: v.optional(v.number()),
+		updatedAt: v.number(),
+	}).index("by_objective", ["objectiveId"])
+		.index("by_owner", ["ownerId"]),
+
+	// Meeting action items
+	meeting_actions: defineTable({
+		userId: v.string(),
+		recordingId: v.optional(v.id("recordings")),
+		sourceText: v.optional(v.string()),
+		action: v.string(),
+		assigneeId: v.optional(v.id("contacts")),
+		assigneeName: v.optional(v.string()),
+		suggestedAssigneeId: v.optional(v.id("contacts")),
+		suggestedReason: v.optional(v.string()),
+		taskId: v.optional(v.id("tasks")),
+		status: v.union(v.literal("pending_review"), v.literal("confirmed"), v.literal("dismissed"), v.literal("converted_to_task")),
+		dueDate: v.optional(v.number()),
+		createdAt: v.number(),
+	}).index("by_user", ["userId"])
+		.index("by_recording", ["recordingId"])
+		.index("by_assignee", ["assigneeId"])
+		.index("by_status", ["status"]),
 
 	// SMS Conversations
 	sms_conversations: defineTable({
