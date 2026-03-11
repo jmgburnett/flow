@@ -15,13 +15,17 @@ import type * as devAuth from "../devAuth.js";
 import type * as functions from "../functions.js";
 import type * as google from "../google.js";
 import type * as http from "../http.js";
+import type * as meetingActions from "../meetingActions.js";
 import type * as memories from "../memories.js";
+import type * as okrs from "../okrs.js";
 import type * as people from "../people.js";
 import type * as profileBuilder from "../profileBuilder.js";
 import type * as seed from "../seed.js";
+import type * as skills from "../skills.js";
 import type * as slack from "../slack.js";
 import type * as sms from "../sms.js";
 import type * as styleAnalysis from "../styleAnalysis.js";
+import type * as team from "../team.js";
 
 import type {
   ApiFromModules,
@@ -37,13 +41,17 @@ declare const fullApi: ApiFromModules<{
   functions: typeof functions;
   google: typeof google;
   http: typeof http;
+  meetingActions: typeof meetingActions;
   memories: typeof memories;
+  okrs: typeof okrs;
   people: typeof people;
   profileBuilder: typeof profileBuilder;
   seed: typeof seed;
+  skills: typeof skills;
   slack: typeof slack;
   sms: typeof sms;
   styleAnalysis: typeof styleAnalysis;
+  team: typeof team;
 }>;
 
 /**

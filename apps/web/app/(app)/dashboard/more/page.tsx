@@ -14,6 +14,7 @@ import {
 	LogOut,
 	Link as LinkIcon,
 	Brain,
+	Network,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -27,6 +28,13 @@ interface MenuOption {
 }
 
 const menuOptions: MenuOption[] = [
+	{
+		name: "Team",
+		href: "/dashboard/team",
+		icon: Network,
+		description: "TeamOS dashboard",
+		color: "bg-primary",
+	},
 	{
 		name: "Memory",
 		href: "/dashboard/memory",
