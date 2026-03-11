@@ -324,6 +324,18 @@ export default defineSchema({
 		updatedAt: v.number(),
 	}).index("by_user", ["userId"]),
 
+	// Design tokens synced from Figma
+	design_tokens: defineTable({
+		fileKey: v.string(),
+		syncedAt: v.number(),
+		colors: v.any(),
+		typography: v.any(),
+		spacing: v.any(),
+		materials: v.any(),
+		cssVariables: v.string(), // Full generated CSS
+		tokenCount: v.number(),
+	}),
+
 	// Email style profiles
 	style_profiles: defineTable({
 		userId: v.string(),

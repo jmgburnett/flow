@@ -1,0 +1,330 @@
+/* ═══════════════════════════════════════════════════════════════
+   Cypress Design Tokens — Auto-generated from Figma
+   Source: figma.com/design/UA7g21UklfSbtc2fXvNOHS
+   Generated: 2026-03-11T03:21:39.904Z
+   ⚠️  DO NOT EDIT — regenerate with: npx tsx scripts/sync-figma-tokens.ts
+   ═══════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Figma Sync Metadata ── */
+  --figma-synced-at: "2026-03-11T03:21:39.904Z";
+
+  /* ── Colors (157 unique tokens) ── */
+
+  /* actions */
+  --cypress-actions-button: rgba(251, 250, 249, 0.64);
+
+  /* badge */
+  --cypress-badge-text: #23221f;
+  --cypress-badge-chip-tag-text: #262626;
+  --cypress-badge-chip-tag-number-badge: #262626;
+
+  /* bg */
+  --cypress-bg-noise: #ffffff;
+
+  /* breadcrumbs */
+  --cypress-breadcrumbs-text: rgba(21, 21, 19, 0.64);
+
+  /* button */
+  --cypress-button-text: #262626;
+
+  /* card */
+  --cypress-card-desktop-light-image: #e5e4e1;
+  --cypress-card-desktop-light-text-content: #efeeec;
+
+  /* content */
+  --cypress-content-page-up: #fbfaf9;
+
+  /* cta */
+  --cypress-cta-sidebarmenuitem: rgba(0, 43, 52, 0.04);
+
+  /* ds */
+  --cypress-ds-color-swatch-wcag-contrast: #1d5f48;
+  --cypress-ds-color-swatch-aa: #151413;
+
+  /* filter */
+  --cypress-filter-tabs-base-badge-chip-tag: #171717;
+
+  /* font */
+  --cypress-font-families-ds-color-swatch: rgba(21, 21, 19, 0.04);
+
+  /* group */
+  --cypress-group-outbound: #43423d;
+  --cypress-group-tools: rgba(21, 21, 19, 0.64);
+  --cypress-group-89-ds-color-swatch: rgba(29, 31, 83, 0.04);
+  --cypress-group-90-ds-color-swatch: rgba(0, 51, 92, 0.04);
+  --cypress-group-91-ds-color-swatch: rgba(0, 61, 41, 0.04);
+  --cypress-group-92-ds-color-swatch: rgba(0, 54, 66, 0.04);
+  --cypress-group-93-ds-color-swatch: rgba(50, 22, 90, 0.04);
+  --cypress-group-94-ds-color-swatch: #fffae0;
+  --cypress-group-95-ds-color-swatch: #fde3e3;
+
+  /* header */
+  --cypress-header-number-badge: #cdfee3;
+  --cypress-header-text: #a3a3a3;
+  --cypress-header-title: #151413;
+
+  /* icon */
+  --cypress-icon-selected-fa-icon: #262626;
+
+  /* icons */
+  --cypress-icons-button: rgba(251, 250, 249, 0.64);
+
+  /* label */
+  --cypress-label-container-label: #23221f;
+
+  /* link */
+  --cypress-link-text: #737373;
+
+  /* logo */
+  --cypress-logo-workspace: rgba(43, 42, 39, 0.32);
+
+  /* macbook */
+  --cypress-macbook-pro-14-8-point-solution-icon: #fbfaf9;
+  --cypress-macbook-pro-14-8-badge: #ef4444;
+  --cypress-macbook-pro-14-8-number-badge: #cdfee3;
+  --cypress-macbook-pro-14-8-text: #a3a3a3;
+  --cypress-macbook-pro-14-8-sidebarmenuitem: rgba(0, 43, 52, 0.04);
+  --cypress-macbook-pro-14-8-outbound: rgba(0, 54, 66, 0.64);
+  --cypress-macbook-pro-14-8-tools: rgba(0, 54, 66, 0.64);
+  --cypress-macbook-pro-14-8-glow: #7089ff;
+  --cypress-macbook-pro-14-11-point-solution-icon: #fbfaf9;
+  --cypress-macbook-pro-14-11-badge: #ef4444;
+  --cypress-macbook-pro-14-11-number-badge: #cdfee3;
+  --cypress-macbook-pro-14-11-text: #a3a3a3;
+  --cypress-macbook-pro-14-11-sidebarmenuitem: rgba(0, 43, 52, 0.04);
+  --cypress-macbook-pro-14-11-outbound: rgba(50, 22, 90, 0.64);
+  --cypress-macbook-pro-14-11-tools: rgba(50, 22, 90, 0.64);
+  --cypress-macbook-pro-14-11-glow: #7089ff;
+  --cypress-macbook-pro-14-13-point-solution-icon: #fbfaf9;
+  --cypress-macbook-pro-14-13-badge: #ef4444;
+  --cypress-macbook-pro-14-13-number-badge: #cdfee3;
+  --cypress-macbook-pro-14-13-text: #a3a3a3;
+  --cypress-macbook-pro-14-13-sidebarmenuitem: rgba(0, 43, 52, 0.04);
+  --cypress-macbook-pro-14-13-outbound: rgba(0, 61, 41, 0.64);
+  --cypress-macbook-pro-14-13-tools: rgba(0, 61, 41, 0.64);
+  --cypress-macbook-pro-14-13-glow: #7089ff;
+  --cypress-macbook-pro-14-9-point-solution-icon: #fbfaf9;
+  --cypress-macbook-pro-14-9-badge: #ef4444;
+  --cypress-macbook-pro-14-9-number-badge: #cdfee3;
+  --cypress-macbook-pro-14-9-text: #a3a3a3;
+  --cypress-macbook-pro-14-9-sidebarmenuitem: rgba(214, 251, 244, 0.04);
+  --cypress-macbook-pro-14-9-outbound: rgba(209, 250, 243, 0.64);
+  --cypress-macbook-pro-14-9-tools: rgba(209, 250, 243, 0.64);
+  --cypress-macbook-pro-14-9-glow: #7089ff;
+  --cypress-macbook-pro-14-12-point-solution-icon: #fbfaf9;
+  --cypress-macbook-pro-14-12-badge: #ef4444;
+  --cypress-macbook-pro-14-12-number-badge: #cdfee3;
+  --cypress-macbook-pro-14-12-text: #a3a3a3;
+  --cypress-macbook-pro-14-12-sidebarmenuitem: rgba(214, 251, 244, 0.04);
+  --cypress-macbook-pro-14-12-outbound: rgba(224, 232, 255, 0.64);
+  --cypress-macbook-pro-14-12-tools: rgba(224, 232, 255, 0.64);
+  --cypress-macbook-pro-14-12-glow: #7089ff;
+  --cypress-macbook-pro-14-14-point-solution-icon: #fbfaf9;
+  --cypress-macbook-pro-14-14-badge: #ef4444;
+  --cypress-macbook-pro-14-14-number-badge: #cdfee3;
+  --cypress-macbook-pro-14-14-text: #a3a3a3;
+  --cypress-macbook-pro-14-14-sidebarmenuitem: rgba(214, 251, 244, 0.04);
+  --cypress-macbook-pro-14-14-outbound: rgba(211, 248, 217, 0.64);
+  --cypress-macbook-pro-14-14-tools: rgba(211, 248, 217, 0.64);
+  --cypress-macbook-pro-14-14-glow: #7089ff;
+  --cypress-macbook-pro-14-17-point-solution-icon: #fbfaf9;
+  --cypress-macbook-pro-14-17-badge: #ef4444;
+  --cypress-macbook-pro-14-17-number-badge: #cdfee3;
+  --cypress-macbook-pro-14-17-text: #a3a3a3;
+  --cypress-macbook-pro-14-17-sidebarmenuitem: rgba(251, 250, 249, 0.04);
+  --cypress-macbook-pro-14-17-glow: #7089ff;
+  --cypress-macbook-pro-14-17-button: #32165a;
+  --cypress-macbook-pro-14-17-card-desktop-light: #23221f;
+  --cypress-macbook-pro-14-17-investment-stock-cell: rgba(27, 26, 24, 0.90);
+  --cypress-macbook-pro-14-15-point-solution-icon: #fbfaf9;
+  --cypress-macbook-pro-14-15-badge: #ef4444;
+  --cypress-macbook-pro-14-15-number-badge: #cdfee3;
+  --cypress-macbook-pro-14-15-text: #a3a3a3;
+  --cypress-macbook-pro-14-15-sidebarmenuitem: rgba(0, 43, 52, 0.04);
+  --cypress-macbook-pro-14-15-outbound: rgba(0, 54, 66, 0.64);
+  --cypress-macbook-pro-14-15-tools: rgba(0, 54, 66, 0.64);
+  --cypress-macbook-pro-14-15-glow: #7089ff;
+  --cypress-macbook-pro-14-15-button: #d1faf3;
+  --cypress-macbook-pro-14-15-video-content: #23221f;
+  --cypress-macbook-pro-14-15-card: #fbfaf9;
+
+  /* number */
+  --cypress-number-badge-text: #006747;
+
+  /* other */
+  --cypress--color-stage: rgba(251, 250, 249, 0.82);
+  --cypress--color-title: #e5e4e1;
+  --cypress--color-increase-in-social-media-impressions-from-24-to-25: #e5e4e1;
+  --cypress--color: #c6c0ae;
+  --cypress--color-spring-cypress: #2a2a28;
+  --cypress--color-brand: #f0ede3;
+  --cypress--color-raised: #2a2a28;
+  --cypress--color-deep: #f0ede3;
+  --cypress--color-accent: #2a2a28;
+  --cypress--color-splash: #2a2a28;
+  --cypress--color-harmony: #2a2a28;
+  --cypress--color-values-scale: #fbfaf9;
+
+  /* page */
+  --cypress-page-up-button: #ccd9ff;
+  --cypress-page-up-card-desktop-light: #ffffff;
+  --cypress-page-up-title: #43423d;
+  --cypress-page-up-increase-in-social-media-impressions-from-24-to-25: #43423d;
+  --cypress-page-down-button: #ccd9ff;
+  --cypress-page-down-card-desktop-light: #ffffff;
+  --cypress-page-down-title: #43423d;
+  --cypress-page-down-increase-in-social-media-impressions-from-24-to-25: #43423d;
+
+  /* point */
+  --cypress-point-solution-icon-subtract: #0d99c0;
+
+  /* rail */
+  --cypress-rail-rail: rgba(251, 250, 249, 0.82);
+  --cypress-rail-button: #d2d1cb;
+
+  /* sidebarmenuitem */
+  --cypress-sidebarmenuitem-: #0f172a;
+  --cypress-sidebarmenuitem-content-studio: #003642;
+  --cypress-sidebarmenuitem-badge: #424142;
+  --cypress-sidebarmenuitem-messages: #151413;
+  --cypress-sidebarmenuitem-drafts: rgba(0, 54, 66, 0.64);
+  --cypress-sidebarmenuitem-email: rgba(0, 54, 66, 0.64);
+  --cypress-sidebarmenuitem-workflows: rgba(0, 54, 66, 0.64);
+  --cypress-sidebarmenuitem-surveys: rgba(0, 54, 66, 0.64);
+  --cypress-sidebarmenuitem-polls: rgba(0, 54, 66, 0.64);
+  --cypress-sidebarmenuitem-memos: rgba(0, 54, 66, 0.64);
+  --cypress-sidebarmenuitem-outbound: rgba(29, 31, 83, 0.64);
+  --cypress-sidebarmenuitem-menu-item: #151413;
+  --cypress-sidebarmenuitem-home: #efeeec;
+  --cypress-sidebarmenuitem-breakdowns: rgba(251, 250, 249, 0.82);
+
+  /* stage */
+  --cypress-stage-wrapper-stage: rgba(251, 250, 249, 0.82);
+  --cypress-stage-wrapper-rail: rgba(251, 250, 249, 0.64);
+
+  /* tab */
+  --cypress-tab-text: #151413;
+  --cypress-tab-unit-desktop-light-divider: #e5e4e1;
+  --cypress-tab-1-selection-indicator: #f9d75e;
+
+  /* tabs */
+  --cypress-tabs-tab: #fbfaf9;
+
+  /* text */
+  --cypress-text-title: #151413;
+  --cypress-text-supporting-text: #e5e4e1;
+  --cypress-text-wrap-text: #43423d;
+  --cypress-text-content-metadata: #43423d;
+  --cypress-text-and-supporting-text-number: #151413;
+  --cypress-text-and-supporting-text-hex: rgba(29, 31, 83, 0.64);
+
+  /* utils */
+  --cypress-utils-bookends-title: rgba(35, 34, 31, 0.64);
+  --cypress-utils-bookends-utils-status: rgba(211, 248, 217, 0.64);
+  --cypress-utils-status-utils-progress: #059961;
+  --cypress-utils-status-text: #151413;
+  --cypress-utils-bookends-utils-documentation: rgba(229, 228, 225, 0.64);
+  --cypress-utils-documentation-docs: #151413;
+  --cypress-utils-bookends-this-is-an-example-of-how-you-can-use-the-component-along-with-examples-of-its-variants-click-on-the-component-and-in-the-section-on-the-right-you-can-see-all-the-available-options: #262626;
+
+  /* ── Typography — Font Families ── */
+  --cypress-font-f37-jan: "F37 Jan", sans-serif;
+  --cypress-font-font-awesome-6-pro: "Font Awesome 6 Pro", sans-serif;
+  --cypress-font-f37-zagma-text-trial: "F37 Zagma Text Trial", sans-serif;
+
+  /* ── Typography — Font Sizes ── */
+  --cypress-text-4xl: 72px;
+  --cypress-text-3xl: 60px;
+  --cypress-text-2xl: 48px;
+  --cypress-text-xl: 36px;
+  --cypress-text-lg: 30px;
+  --cypress-text-base: 24px;
+  --cypress-text-sm: 20px;
+  --cypress-text-xs: 18px;
+  --cypress-text-2xs: 16px;
+
+  /* ── Spacing Scale (48 values) ── */
+  --cypress-space-0: 0px;
+  --cypress-space-1: 1px;
+  --cypress-space-2: 2px;
+  --cypress-space-3: 3px;
+  --cypress-space-4: 4px;
+  --cypress-space-5: 5px;
+  --cypress-space-6: 6px;
+  --cypress-space-7: 7px;
+  --cypress-space-8: 8px;
+  --cypress-space-9: 9px;
+  --cypress-space-10: 10px;
+  --cypress-space-11: 11px;
+  --cypress-space-12: 12px;
+  --cypress-space-14: 14px;
+  --cypress-space-16: 16px;
+  --cypress-space-20: 20px;
+  --cypress-space-24: 24px;
+  --cypress-space-28: 28px;
+  --cypress-space-32: 32px;
+  --cypress-space-36: 36px;
+  --cypress-space-40: 40px;
+  --cypress-space-44: 44px;
+  --cypress-space-48: 48px;
+  --cypress-space-56: 56px;
+  --cypress-space-64: 64px;
+  --cypress-space-72: 72px;
+  --cypress-space-80: 80px;
+  --cypress-space-96: 96px;
+  --cypress-space-112: 112px;
+  --cypress-space-128: 128px;
+  --cypress-space-144: 144px;
+  --cypress-space-160: 160px;
+  --cypress-space-168: 168px;
+  --cypress-space-192: 192px;
+  --cypress-space-224: 224px;
+  --cypress-space-256: 256px;
+  --cypress-space-288: 288px;
+  --cypress-space-320: 320px;
+  --cypress-space-384: 384px;
+  --cypress-space-448: 448px;
+  --cypress-space-512: 512px;
+  --cypress-space-576: 576px;
+  --cypress-space-672: 672px;
+  --cypress-space-768: 768px;
+  --cypress-space-896: 896px;
+  --cypress-space-1024: 1024px;
+  --cypress-space-1152: 1152px;
+  --cypress-space-1280: 1280px;
+
+  /* ── Elevation / Shadows ── */
+  --cypress-shadow-frame-2136137366: 0px 0px 80px 0px rgba(204, 217, 255, 1.00), 0px 0px 40px 0px rgba(21, 21, 19, 0.04);
+  --cypress-blur-frame-2136137366: 16px;
+  --cypress-shadow-frame-2136137365: 40px 40px 80px 0px rgba(21, 21, 19, 0.08), 10px 5px 20px 0px rgba(21, 21, 19, 0.08), -20px 5px 40px 0px rgba(21, 21, 19, 0.08);
+  --cypress-blur-frame-2136137365: 12px;
+  --cypress-shadow-frame-2136137367: 40px 40px 80px 0px rgba(21, 21, 19, 0.08), 10px 5px 20px 0px rgba(21, 21, 19, 0.08), -20px 5px 40px 0px rgba(21, 21, 19, 0.08);
+  --cypress-blur-frame-2136137367: 12px;
+  --cypress-shadow-frame-2136137368: 40px 40px 80px 0px rgba(21, 21, 19, 0.08), 10px 5px 20px 0px rgba(21, 21, 19, 0.08), -20px 5px 40px 0px rgba(21, 21, 19, 0.08);
+  --cypress-blur-frame-2136137368: 12px;
+  --cypress-shadow-surface: 40px 40px 80px 0px rgba(21, 21, 19, 0.08), 10px 5px 20px 0px rgba(21, 21, 19, 0.08), -20px 5px 40px 0px rgba(21, 21, 19, 0.08);
+  --cypress-blur-surface: 12px;
+  --cypress-shadow-surface: 0px 4px 8px -1px rgba(21, 21, 19, 0.04), 0px 2px 2px 0px rgba(21, 21, 19, 0.04);
+  --cypress-blur-surface: 12px;
+  --cypress-shadow-surface: 0px 8px 20px -4px rgba(21, 21, 19, 0.04), 0px 4px 16px 0px rgba(21, 21, 19, 0.04);
+  --cypress-blur-surface: 12px;
+  --cypress-shadow-surface: 16px 16px 18px -8px rgba(21, 21, 19, 0.08), -16px 4px 18px -8px rgba(21, 21, 19, 0.08);
+  --cypress-blur-surface: 12px;
+  --cypress-shadow-surface: 40px 40px 80px 0px rgba(21, 21, 19, 0.08), 10px 5px 20px 0px rgba(21, 21, 19, 0.08), -20px 5px 40px 0px rgba(21, 21, 19, 0.08);
+  --cypress-blur-surface: 12px;
+
+  /* ── Glass / Blur Materials ── */
+  --cypress-blur-frame-2136137366: 16px;
+  --cypress-blur-frame-2136137365: 12px;
+  --cypress-blur-frame-2136137367: 12px;
+  --cypress-blur-frame-2136137368: 12px;
+  --cypress-blur-surface: 12px;
+  --cypress-blur-surface: 12px;
+  --cypress-blur-surface: 8px;
+  --cypress-blur-surface: 12px;
+  --cypress-blur-surface: 12px;
+  --cypress-blur-surface: 12px;
+  --cypress-blur-surface: 12px;
+  --cypress-blur-surface: 12px;
+}

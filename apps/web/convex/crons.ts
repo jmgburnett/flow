@@ -14,4 +14,15 @@ crons.daily(
 	{ userId: "josh" },
 );
 
+// ═══════════════════════════════════════════════
+// Daily Figma design token sync — runs at 5 AM CT (11:00 UTC)
+// Pulls latest Cypress tokens from Figma and stores in DB
+// ═══════════════════════════════════════════════
+crons.daily(
+	"daily-figma-token-sync",
+	{ hourUTC: 11, minuteUTC: 0 },
+	internal.designTokens.syncFromFigma,
+	{ fileKey: "UA7g21UklfSbtc2fXvNOHS" },
+);
+
 export default crons;
