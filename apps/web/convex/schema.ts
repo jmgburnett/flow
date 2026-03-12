@@ -184,14 +184,25 @@ export default defineSchema({
 		.index("by_user_and_status", ["userId", "status"])
 		.index("by_email", ["email"]),
 
-	// Chat with Flobot
+	// Chat conversations with Flobot
+	chat_conversations: defineTable({
+		userId: v.string(),
+		title: v.string(), // Auto-generated from first message or AI summary
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	}).index("by_user", ["userId"])
+		.index("by_user_and_updated", ["userId", "updatedAt"]),
+
+	// Chat messages within conversations
 	chat_messages: defineTable({
 		userId: v.string(),
+		conversationId: v.optional(v.id("chat_conversations")), // optional for backward compat
 		role: v.union(v.literal("user"), v.literal("assistant")),
 		content: v.string(),
 		timestamp: v.number(),
 	}).index("by_user", ["userId"])
-		.index("by_user_and_timestamp", ["userId", "timestamp"]),
+		.index("by_user_and_timestamp", ["userId", "timestamp"])
+		.index("by_conversation", ["conversationId", "timestamp"]),
 
 	// Daily briefs
 	daily_briefs: defineTable({
