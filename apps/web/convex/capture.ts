@@ -273,6 +273,12 @@ export const transcribeChunk = internalAction({
 			if (chunk.chunkIndex > 0 && chunk.chunkIndex % 5 === 0) {
 				await updateRollingContext(ctx, chunk.sessionId);
 			}
+
+			// Schedule AI task extraction
+			await ctx.scheduler.runAfter(0, internal.capture.extractTasksFromChunk, {
+				chunkId: args.chunkId,
+				sessionId: chunk.sessionId,
+			});
 		} catch (error) {
 			console.error("Transcription error:", error);
 			await ctx.runMutation(internal.capture.updateChunkStatus, {
@@ -448,6 +454,300 @@ export const getSessionTranscript = query({
 				transcript: c.transcriptText,
 				durationMs: c.durationMs,
 			}));
+	},
+});
+
+// ─── AI Task Extraction (Sprint 2) ───
+
+// Get session for context
+export const getSession = internalQuery({
+	args: { sessionId: v.id("capture_sessions") },
+	handler: async (ctx, args) => {
+		return await ctx.db.get(args.sessionId);
+	},
+});
+
+// Insert extracted live task
+export const insertLiveTask = internalMutation({
+	args: {
+		userId: v.string(),
+		sessionId: v.id("capture_sessions"),
+		chunkId: v.id("capture_chunks"),
+		description: v.string(),
+		owner: v.union(v.literal("josh"), v.literal("team")),
+		ownerName: v.optional(v.string()),
+		assignedTo: v.optional(v.string()),
+		deadline: v.optional(v.string()),
+		urgency: v.union(v.literal("low"), v.literal("medium"), v.literal("high")),
+		category: v.union(
+			v.literal("task"),
+			v.literal("commitment"),
+			v.literal("decision"),
+			v.literal("follow_up"),
+			v.literal("question"),
+		),
+		sourceText: v.string(),
+		timestamp: v.number(),
+	},
+	handler: async (ctx, args) => {
+		return await ctx.db.insert("live_tasks", {
+			...args,
+			status: "pending",
+		});
+	},
+});
+
+// Extract tasks from a transcribed chunk
+export const extractTasksFromChunk = internalAction({
+	args: {
+		chunkId: v.id("capture_chunks"),
+		sessionId: v.id("capture_sessions"),
+	},
+	handler: async (ctx, args) => {
+		const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+		if (!ANTHROPIC_API_KEY) {
+			console.warn("ANTHROPIC_API_KEY not set, skipping task extraction");
+			return;
+		}
+
+		const chunk = await ctx.runQuery(internal.capture.getChunk, {
+			chunkId: args.chunkId,
+		});
+
+		if (!chunk || !chunk.transcriptText) return;
+
+		// Get session context
+		const session = await ctx.runQuery(internal.capture.getSession, {
+			sessionId: args.sessionId,
+		});
+
+		const contextBlock = session?.currentContext
+			? `\nContext from earlier in the day:\n${session.currentContext}\n`
+			: "";
+
+		const response = await fetch("https://api.anthropic.com/v1/messages", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"x-api-key": ANTHROPIC_API_KEY,
+				"anthropic-version": "2023-06-01",
+			},
+			body: JSON.stringify({
+				model: "claude-3-haiku-20240307",
+				max_tokens: 1500,
+				messages: [
+					{
+						role: "user",
+						content: `You are analyzing a live transcript from Josh Burnett's workday (Head of AI Product at Gloo). Extract any actionable items.
+
+Look for:
+1. TASK — something someone needs to do ("I'll send that over", "Can you update the doc?")
+2. COMMITMENT — a promise made ("I'll have that by Friday", "We'll ship next week")
+3. DECISION — a choice made ("Let's go with option B", "We're killing that feature")
+4. FOLLOW_UP — something to revisit ("Let's circle back", "Remind me to check")
+5. QUESTION — an unresolved question that needs answering
+
+For each item, determine:
+- description: clear, actionable summary (not the raw quote)
+- owner: "josh" if it's Josh's responsibility, "team" if someone else's
+- ownerName: the person's name if identifiable (e.g. "Doug", "Sarah")
+- assignedTo: who needs to act on it
+- deadline: any mentioned deadline (e.g. "by Friday", "next week")
+- urgency: "high" (explicit deadline or urgent language), "medium" (important but no rush), "low" (nice-to-have)
+- category: one of task, commitment, decision, follow_up, question
+- sourceText: the exact relevant quote from the transcript
+
+Respond with a JSON array. If nothing actionable is found, respond with an empty array [].
+Do NOT extract greetings, small talk, or routine conversation. Only extract genuine action items and commitments.
+${contextBlock}
+Current transcript chunk:
+${chunk.transcriptText}
+
+Respond with ONLY a JSON array, no other text:`,
+					},
+				],
+			}),
+		});
+
+		if (!response.ok) {
+			console.error("Extraction API error:", await response.text());
+			return;
+		}
+
+		const data = await response.json();
+		const text = data.content[0].text.trim();
+
+		// Parse JSON response
+		let items: Array<{
+			description: string;
+			owner: string;
+			ownerName?: string;
+			assignedTo?: string;
+			deadline?: string;
+			urgency: string;
+			category: string;
+			sourceText: string;
+		}>;
+
+		try {
+			// Handle potential markdown code block wrapping
+			const jsonText = text.replace(/^```json?\n?/, "").replace(/\n?```$/, "");
+			items = JSON.parse(jsonText);
+		} catch {
+			console.error("Failed to parse extraction response:", text);
+			return;
+		}
+
+		if (!Array.isArray(items) || items.length === 0) return;
+
+		// Insert each extracted task
+		for (const item of items) {
+			const owner = item.owner === "josh" ? "josh" as const : "team" as const;
+			const urgency = (["low", "medium", "high"].includes(item.urgency)
+				? item.urgency
+				: "medium") as "low" | "medium" | "high";
+			const category = (["task", "commitment", "decision", "follow_up", "question"].includes(item.category)
+				? item.category
+				: "task") as "task" | "commitment" | "decision" | "follow_up" | "question";
+
+			await ctx.runMutation(internal.capture.insertLiveTask, {
+				userId: session?.userId ?? "josh",
+				sessionId: args.sessionId,
+				chunkId: args.chunkId,
+				description: item.description,
+				owner,
+				ownerName: item.ownerName,
+				assignedTo: item.assignedTo,
+				deadline: item.deadline,
+				urgency,
+				category,
+				sourceText: item.sourceText || item.description,
+				timestamp: Date.now(),
+			});
+		}
+	},
+});
+
+// ─── Live Task Queries ───
+
+// Get live tasks for a user (real-time feed)
+export const getLiveTasks = query({
+	args: {
+		userId: v.string(),
+		sessionId: v.optional(v.id("capture_sessions")),
+		filter: v.optional(v.union(
+			v.literal("all"),
+			v.literal("mine"),
+			v.literal("team"),
+			v.literal("decisions"),
+			v.literal("pending"),
+		)),
+	},
+	handler: async (ctx, args) => {
+		let tasks;
+
+		if (args.sessionId) {
+			tasks = await ctx.db
+				.query("live_tasks")
+				.withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
+				.collect();
+		} else {
+			tasks = await ctx.db
+				.query("live_tasks")
+				.withIndex("by_user", (q) => q.eq("userId", args.userId))
+				.collect();
+		}
+
+		// Apply filter
+		const filter = args.filter ?? "all";
+		if (filter === "mine") {
+			tasks = tasks.filter((t) => t.owner === "josh");
+		} else if (filter === "team") {
+			tasks = tasks.filter((t) => t.owner === "team");
+		} else if (filter === "decisions") {
+			tasks = tasks.filter((t) => t.category === "decision");
+		} else if (filter === "pending") {
+			tasks = tasks.filter((t) => t.status === "pending");
+		}
+
+		// Sort by most recent first
+		return tasks.sort((a, b) => b.timestamp - a.timestamp);
+	},
+});
+
+// Get live task counts by category
+export const getLiveTaskCounts = query({
+	args: {
+		userId: v.string(),
+		sessionId: v.optional(v.id("capture_sessions")),
+	},
+	handler: async (ctx, args) => {
+		let tasks;
+		if (args.sessionId) {
+			tasks = await ctx.db
+				.query("live_tasks")
+				.withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
+				.collect();
+		} else {
+			tasks = await ctx.db
+				.query("live_tasks")
+				.withIndex("by_user", (q) => q.eq("userId", args.userId))
+				.collect();
+		}
+
+		return {
+			total: tasks.length,
+			pending: tasks.filter((t) => t.status === "pending").length,
+			mine: tasks.filter((t) => t.owner === "josh").length,
+			team: tasks.filter((t) => t.owner === "team").length,
+			tasks: tasks.filter((t) => t.category === "task").length,
+			commitments: tasks.filter((t) => t.category === "commitment").length,
+			decisions: tasks.filter((t) => t.category === "decision").length,
+			followUps: tasks.filter((t) => t.category === "follow_up").length,
+		};
+	},
+});
+
+// Approve a live task
+export const approveLiveTask = mutation({
+	args: { taskId: v.id("live_tasks") },
+	handler: async (ctx, args) => {
+		await ctx.db.patch(args.taskId, { status: "approved" });
+	},
+});
+
+// Dismiss a live task
+export const dismissLiveTask = mutation({
+	args: { taskId: v.id("live_tasks") },
+	handler: async (ctx, args) => {
+		await ctx.db.patch(args.taskId, { status: "dismissed" });
+	},
+});
+
+// Convert a live task to a real task
+export const convertLiveTask = mutation({
+	args: { liveTaskId: v.id("live_tasks") },
+	handler: async (ctx, args) => {
+		const liveTask = await ctx.db.get(args.liveTaskId);
+		if (!liveTask) throw new Error("Live task not found");
+
+		// Create a real task
+		const taskId = await ctx.db.insert("tasks", {
+			userId: liveTask.userId,
+			title: liveTask.description,
+			description: `Source: Live Capture\nQuote: "${liveTask.sourceText}"${liveTask.deadline ? `\nDeadline: ${liveTask.deadline}` : ""}${liveTask.assignedTo ? `\nAssigned to: ${liveTask.assignedTo}` : ""}`,
+			source: "recording",
+			priority: liveTask.urgency === "high" ? "urgent" : liveTask.urgency === "medium" ? "medium" : "low",
+			status: "todo",
+		});
+
+		// Update live task
+		await ctx.db.patch(args.liveTaskId, {
+			status: "converted",
+			taskId,
+		});
+
+		return taskId;
 	},
 });
 

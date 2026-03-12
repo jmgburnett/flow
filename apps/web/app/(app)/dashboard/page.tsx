@@ -1,10 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { HomeChat } from "@/components/home-chat";
 import { LiveCaptureBar, TranscriptViewer } from "@/components/live-capture";
+import { LiveFeed } from "@/components/live-feed";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Mail, MessageCircle, Clock, ChevronRight, Mic } from "lucide-react";
+import { Calendar, Mail, MessageCircle, Clock, ChevronRight, Mic, Zap, FileText } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import Link from "next/link";
@@ -28,7 +31,6 @@ function QuickGlance() {
 
 	return (
 		<div className="space-y-3">
-			{/* Stats row */}
 			<div className="grid grid-cols-3 gap-2">
 				{[
 					{ label: "Needs You", value: needsMe.length, href: "/dashboard/inbox", color: "text-red-500" },
@@ -44,7 +46,6 @@ function QuickGlance() {
 				))}
 			</div>
 
-			{/* Next event */}
 			{nextEvent && (
 				<Link href="/dashboard/calendar">
 					<div className="glass-card rounded-xl p-3 hover:shadow-md active:scale-[0.98] transition-all">
@@ -61,7 +62,6 @@ function QuickGlance() {
 				</Link>
 			)}
 
-			{/* Priority emails */}
 			{needsMe.length > 0 && (
 				<div className="glass-card rounded-xl overflow-hidden">
 					<div className="flex items-center justify-between px-3 pt-3 pb-1.5">
@@ -89,26 +89,82 @@ function QuickGlance() {
 	);
 }
 
-function CapturePanel() {
+type RightPanelTab = "feed" | "transcript" | "glance";
+
+function RightSidebar() {
+	const [activeTab, setActiveTab] = useState<RightPanelTab>("feed");
 	const activeSession = useQuery(api.capture.getActiveSession, { userId: "josh" });
+	const isRecording = activeSession && activeSession.status !== "stopped";
 
 	return (
-		<div className="space-y-3">
-			<div className="flex items-center gap-1.5 mb-1">
-				<Mic className="h-3.5 w-3.5 text-muted-foreground" />
-				<span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-					Live Capture
-				</span>
-			</div>
-			<LiveCaptureBar />
-			{activeSession && activeSession.status !== "stopped" && (
-				<div className="glass-card rounded-xl p-3">
-					<p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-						Live Transcript
-					</p>
-					<TranscriptViewer sessionId={activeSession._id} />
+		<div className="flex flex-col h-full">
+			{/* Capture controls — always visible */}
+			<div className="px-4 pt-4 pb-3">
+				<div className="flex items-center gap-1.5 mb-2">
+					<Mic className="h-3.5 w-3.5 text-muted-foreground" />
+					<span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+						Live Capture
+					</span>
 				</div>
-			)}
+				<LiveCaptureBar />
+			</div>
+
+			{/* Tab switcher */}
+			<div className="flex items-center gap-1 px-4 pb-2">
+				<button
+					type="button"
+					onClick={() => setActiveTab("feed")}
+					className={cn(
+						"flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors",
+						activeTab === "feed" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent",
+					)}
+				>
+					<Zap className="h-3 w-3" />
+					Live Feed
+				</button>
+				{isRecording && (
+					<button
+						type="button"
+						onClick={() => setActiveTab("transcript")}
+						className={cn(
+							"flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors",
+							activeTab === "transcript" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent",
+						)}
+					>
+						<FileText className="h-3 w-3" />
+						Transcript
+					</button>
+				)}
+				<button
+					type="button"
+					onClick={() => setActiveTab("glance")}
+					className={cn(
+						"flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors",
+						activeTab === "glance" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent",
+					)}
+				>
+					At a Glance
+				</button>
+			</div>
+
+			<div className="border-t border-border/30" />
+
+			{/* Tab content */}
+			<div className="flex-1 overflow-hidden">
+				{activeTab === "feed" && (
+					<LiveFeed sessionId={isRecording ? activeSession._id : undefined} />
+				)}
+				{activeTab === "transcript" && isRecording && (
+					<div className="p-4 overflow-y-auto h-full">
+						<TranscriptViewer sessionId={activeSession._id} />
+					</div>
+				)}
+				{activeTab === "glance" && (
+					<div className="p-4 overflow-y-auto h-full">
+						<QuickGlance />
+					</div>
+				)}
+			</div>
 		</div>
 	);
 }
@@ -130,21 +186,9 @@ function DashboardContent() {
 					<HomeChat />
 				</div>
 
-				{/* Right sidebar — quick glance + capture (desktop only) */}
-				<div className="hidden lg:block w-[300px] shrink-0 border-l border-border/30 p-4 overflow-y-auto space-y-6">
-					{/* Live Capture */}
-					<CapturePanel />
-
-					{/* Divider */}
-					<div className="border-t border-border/30" />
-
-					{/* At a Glance */}
-					<div>
-						<p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-							At a Glance
-						</p>
-						<QuickGlance />
-					</div>
+				{/* Right sidebar — capture + live feed + glance (desktop only) */}
+				<div className="hidden lg:flex lg:flex-col w-[320px] shrink-0 border-l border-border/30">
+					<RightSidebar />
 				</div>
 			</div>
 		</DashboardLayout>
