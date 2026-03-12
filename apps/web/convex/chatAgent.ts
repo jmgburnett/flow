@@ -160,11 +160,68 @@ const TOOLS: Tool[] = [
 			required: ["nameQuery"],
 		},
 	},
+	{
+		name: "search_emails",
+		description:
+			"Search Josh's emails by keyword, sender name, or subject. Returns matching emails with subject, sender, body snippet, and triage status.",
+		input_schema: {
+			type: "object",
+			properties: {
+				query: {
+					type: "string",
+					description: "Search query — matches against subject, sender, and body text",
+				},
+				fromPerson: {
+					type: "string",
+					description: "Filter by sender name or email (optional)",
+				},
+				triageStatus: {
+					type: "string",
+					enum: ["needs_me", "draft_ready", "handled", "ignore"],
+					description: "Filter by triage status (optional)",
+				},
+				limit: {
+					type: "number",
+					description: "Max results to return (default: 10)",
+				},
+			},
+			required: ["query"],
+		},
+	},
+	{
+		name: "get_email_thread",
+		description:
+			"Get the full email thread/conversation for a specific email thread ID. Use this when Josh asks to see or summarize a specific email conversation.",
+		input_schema: {
+			type: "object",
+			properties: {
+				threadId: {
+					type: "string",
+					description: "Gmail thread ID",
+				},
+			},
+			required: ["threadId"],
+		},
+	},
+	{
+		name: "get_inbox_summary",
+		description:
+			"Get a summary of Josh's inbox — counts by triage status, most recent important emails, and any unread items needing attention.",
+		input_schema: {
+			type: "object",
+			properties: {
+				accountEmail: {
+					type: "string",
+					description: "Filter to a specific account (optional, default: all accounts)",
+				},
+			},
+		},
+	},
 ];
 
 // ─── System Prompt ───
 
-const SYSTEM_PROMPT = `You are Flobot, Josh Burnett's AI Chief of Staff in the Flow app. You help Josh manage his schedule and coordinate meetings.
+const SYSTEM_PROMPT = `You are Flobot, Josh Burnett's AI Chief of Staff in the Flow app. You help Josh manage his schedule, coordinate meetings, and stay on top of email.
 
 ## About Josh
 - Josh is Head of AI Product at Gloo and founder of Church.tech
@@ -185,17 +242,26 @@ const SYSTEM_PROMPT = `You are Flobot, Josh Burnett's AI Chief of Staff in the F
 4. When Josh picks a slot, use create_event to book it
 5. For external people whose calendars you can't query, propose Josh's open slots and offer to email them the options
 
+## Email Capabilities
+- You can search Josh's emails by keyword, sender, or subject
+- You can pull up full email threads and summarize them
+- You can give inbox status (how many need attention, drafts ready, etc.)
+- When summarizing emails, be concise — pull out the key ask or information
+- If Josh asks "what did [person] say about [topic]", search emails and summarize the relevant messages
+
 ## Communication Style
 - Be concise and conversational — not corporate
 - Format times as "Tuesday, March 17 at 10:00 AM CT" (readable, with CT)
 - Don't say "I'd be happy to help" — just help
 - When showing calendar, use a clean format with times and titles
+- When summarizing emails, lead with the key point, then supporting details
 - If something goes wrong with an API call, explain simply and suggest next steps
 
 ## Important
 - Always check ALL 4 of Josh's calendars for conflicts before suggesting times
 - When creating events, confirm the details before creating
-- Convert all times to Central Time for display`;
+- Convert all times to Central Time for display
+- For email searches, search broadly then filter — the search is keyword-based`;
 
 // ─── Internal Queries ───
 
@@ -284,6 +350,134 @@ export const getUpcomingEvents = internalQuery({
 				attendees: e.attendees,
 				accountEmail: e.accountEmail,
 			}));
+	},
+});
+
+// Search emails by query
+export const searchEmails = internalQuery({
+	args: {
+		userId: v.string(),
+		query: v.string(),
+		fromPerson: v.optional(v.string()),
+		triageStatus: v.optional(v.string()),
+		limit: v.optional(v.number()),
+	},
+	handler: async (ctx, args) => {
+		const limit = args.limit ?? 10;
+		const allEmails = await ctx.db
+			.query("emails")
+			.withIndex("by_user", (q) => q.eq("userId", args.userId))
+			.order("desc")
+			.take(500); // Search across recent emails
+
+		const queryLower = args.query.toLowerCase();
+		const fromLower = args.fromPerson?.toLowerCase();
+
+		const filtered = allEmails.filter((email) => {
+			// Text match
+			const textMatch =
+				email.subject.toLowerCase().includes(queryLower) ||
+				email.from.toLowerCase().includes(queryLower) ||
+				email.body.toLowerCase().includes(queryLower);
+
+			// From filter
+			const fromMatch = fromLower
+				? email.from.toLowerCase().includes(fromLower)
+				: true;
+
+			// Triage filter
+			const triageMatch = args.triageStatus
+				? email.triageStatus === args.triageStatus
+				: true;
+
+			return textMatch && fromMatch && triageMatch;
+		});
+
+		return filtered.slice(0, limit).map((e) => ({
+			_id: e._id,
+			subject: e.subject,
+			from: e.from,
+			to: e.to,
+			body: e.body.slice(0, 500), // Truncate body
+			threadId: e.threadId,
+			triageStatus: e.triageStatus,
+			accountEmail: e.accountEmail,
+			receivedAt: e.receivedAt,
+			draftReply: e.draftReply,
+		}));
+	},
+});
+
+// Get emails in a thread
+export const getEmailThread = internalQuery({
+	args: {
+		threadId: v.string(),
+	},
+	handler: async (ctx, args) => {
+		const emails = await ctx.db
+			.query("emails")
+			.withIndex("by_thread", (q) => q.eq("threadId", args.threadId))
+			.collect();
+
+		return emails
+			.sort((a, b) => a.receivedAt - b.receivedAt)
+			.map((e) => ({
+				subject: e.subject,
+				from: e.from,
+				to: e.to,
+				body: e.body.slice(0, 1000),
+				receivedAt: e.receivedAt,
+				triageStatus: e.triageStatus,
+			}));
+	},
+});
+
+// Get inbox summary
+export const getInboxSummary = internalQuery({
+	args: {
+		userId: v.string(),
+		accountEmail: v.optional(v.string()),
+	},
+	handler: async (ctx, args) => {
+		let emails;
+		if (args.accountEmail) {
+			emails = await ctx.db
+				.query("emails")
+				.withIndex("by_account_email", (q) => q.eq("accountEmail", args.accountEmail!))
+				.collect();
+			emails = emails.filter((e) => e.userId === args.userId);
+		} else {
+			emails = await ctx.db
+				.query("emails")
+				.withIndex("by_user", (q) => q.eq("userId", args.userId))
+				.collect();
+		}
+
+		const counts = {
+			needs_me: 0,
+			draft_ready: 0,
+			handled: 0,
+			ignore: 0,
+			total: emails.length,
+		};
+
+		for (const e of emails) {
+			counts[e.triageStatus]++;
+		}
+
+		// Get most recent "needs_me" emails
+		const urgent = emails
+			.filter((e) => e.triageStatus === "needs_me")
+			.sort((a, b) => b.receivedAt - a.receivedAt)
+			.slice(0, 5)
+			.map((e) => ({
+				subject: e.subject,
+				from: e.from,
+				receivedAt: e.receivedAt,
+				bodySnippet: e.body.slice(0, 200),
+			}));
+
+		return { counts, urgent };
 	},
 });
 
@@ -735,6 +929,96 @@ async function handleLookupContact(
 	return JSON.stringify({ results });
 }
 
+// ─── Email Tool Handlers ───
+
+async function handleSearchEmails(
+	ctx: any,
+	input: Record<string, unknown>,
+): Promise<string> {
+	const { query, fromPerson, triageStatus, limit } = input as {
+		query: string;
+		fromPerson?: string;
+		triageStatus?: string;
+		limit?: number;
+	};
+
+	const results = await ctx.runQuery(internal.chatAgent.searchEmails, {
+		userId: "josh",
+		query,
+		fromPerson,
+		triageStatus,
+		limit,
+	});
+
+	if (results.length === 0) {
+		return JSON.stringify({
+			results: [],
+			message: `No emails found matching "${query}"${fromPerson ? ` from ${fromPerson}` : ""}`,
+		});
+	}
+
+	return JSON.stringify({
+		results: results.map((e: any) => ({
+			subject: e.subject,
+			from: e.from,
+			bodySnippet: e.body,
+			threadId: e.threadId,
+			triageStatus: e.triageStatus,
+			account: e.accountEmail,
+			receivedAt: new Date(e.receivedAt).toISOString(),
+			hasDraft: !!e.draftReply,
+		})),
+		count: results.length,
+	});
+}
+
+async function handleGetEmailThread(
+	ctx: any,
+	input: Record<string, unknown>,
+): Promise<string> {
+	const { threadId } = input as { threadId: string };
+
+	const thread = await ctx.runQuery(internal.chatAgent.getEmailThread, {
+		threadId,
+	});
+
+	if (thread.length === 0) {
+		return JSON.stringify({ error: "No emails found in this thread" });
+	}
+
+	return JSON.stringify({
+		thread: thread.map((e: any) => ({
+			from: e.from,
+			subject: e.subject,
+			body: e.body,
+			receivedAt: new Date(e.receivedAt).toISOString(),
+		})),
+		messageCount: thread.length,
+	});
+}
+
+async function handleGetInboxSummary(
+	ctx: any,
+	input: Record<string, unknown>,
+): Promise<string> {
+	const { accountEmail } = input as { accountEmail?: string };
+
+	const summary = await ctx.runQuery(internal.chatAgent.getInboxSummary, {
+		userId: "josh",
+		accountEmail,
+	});
+
+	return JSON.stringify({
+		counts: summary.counts,
+		urgentEmails: summary.urgent.map((e: any) => ({
+			subject: e.subject,
+			from: e.from,
+			snippet: e.bodySnippet,
+			receivedAt: new Date(e.receivedAt).toISOString(),
+		})),
+	});
+}
+
 // ─── Tool Dispatcher ───
 
 async function executeTool(
@@ -753,6 +1037,12 @@ async function executeTool(
 			return handleGetMyCalendar(ctx, input);
 		case "lookup_contact":
 			return handleLookupContact(ctx, input);
+		case "search_emails":
+			return handleSearchEmails(ctx, input);
+		case "get_email_thread":
+			return handleGetEmailThread(ctx, input);
+		case "get_inbox_summary":
+			return handleGetInboxSummary(ctx, input);
 		default:
 			return JSON.stringify({ error: `Unknown tool: ${toolName}` });
 	}
