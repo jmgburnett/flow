@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 
-const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY;
+const ASSEMBLYAI_API_KEY = process.env.ASSEMBLYAI_API_KEY;
 
 // ─── Session Management ───
 
@@ -247,9 +247,9 @@ export const transcribeChunk = internalAction({
 
 			let transcript: string;
 
-			if (DEEPGRAM_API_KEY) {
-				// Use Deepgram
-				transcript = await transcribeWithDeepgram(audioBlob);
+			if (ASSEMBLYAI_API_KEY) {
+				// Use AssemblyAI (preferred)
+				transcript = await transcribeWithAssemblyAI(audioBlob);
 			} else {
 				// Fallback: use OpenAI Whisper API
 				const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -257,7 +257,7 @@ export const transcribeChunk = internalAction({
 					transcript = await transcribeWithWhisper(audioBlob, OPENAI_API_KEY);
 				} else {
 					throw new Error(
-						"No transcription API key configured. Set DEEPGRAM_API_KEY or OPENAI_API_KEY in Convex env vars.",
+						"No transcription API key configured. Set ASSEMBLYAI_API_KEY or OPENAI_API_KEY in Convex env vars.",
 					);
 				}
 			}
@@ -290,57 +290,80 @@ export const transcribeChunk = internalAction({
 	},
 });
 
-// Deepgram transcription
-async function transcribeWithDeepgram(audioData: ArrayBuffer): Promise<string> {
-	const response = await fetch(
-		"https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&diarize=true&punctuate=true",
-		{
-			method: "POST",
-			headers: {
-				Authorization: `Token ${DEEPGRAM_API_KEY}`,
-				"Content-Type": "audio/webm",
-			},
-			body: audioData,
+// AssemblyAI transcription
+async function transcribeWithAssemblyAI(audioData: ArrayBuffer): Promise<string> {
+	// Step 1: Upload audio to AssemblyAI
+	const uploadResponse = await fetch("https://api.assemblyai.com/v2/upload", {
+		method: "POST",
+		headers: {
+			Authorization: ASSEMBLYAI_API_KEY!,
+			"Content-Type": "application/octet-stream",
 		},
-	);
+		body: audioData,
+	});
 
-	if (!response.ok) {
-		throw new Error(`Deepgram API error: ${await response.text()}`);
+	if (!uploadResponse.ok) {
+		throw new Error(`AssemblyAI upload error: ${await uploadResponse.text()}`);
 	}
 
-	const data = await response.json();
+	const { upload_url } = await uploadResponse.json();
 
-	// Extract transcript with speaker labels
-	const words = data.results?.channels?.[0]?.alternatives?.[0]?.words || [];
+	// Step 2: Create transcript with speaker diarization
+	const transcriptResponse = await fetch("https://api.assemblyai.com/v2/transcript", {
+		method: "POST",
+		headers: {
+			Authorization: ASSEMBLYAI_API_KEY!,
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify({
+			audio_url: upload_url,
+			speaker_labels: true,
+			language_code: "en",
+		}),
+	});
 
-	if (words.length === 0) {
-		const plainTranscript =
-			data.results?.channels?.[0]?.alternatives?.[0]?.transcript || "";
-		return plainTranscript || "[No speech detected]";
+	if (!transcriptResponse.ok) {
+		throw new Error(`AssemblyAI transcript error: ${await transcriptResponse.text()}`);
 	}
 
-	// Group words by speaker
-	let currentSpeaker = -1;
-	const segments: string[] = [];
-	let currentSegment = "";
+	const { id: transcriptId } = await transcriptResponse.json();
 
-	for (const word of words) {
-		if (word.speaker !== currentSpeaker) {
-			if (currentSegment) {
-				segments.push(`[Speaker ${currentSpeaker}]: ${currentSegment.trim()}`);
-			}
-			currentSpeaker = word.speaker;
-			currentSegment = word.punctuated_word || word.word;
-		} else {
-			currentSegment += ` ${word.punctuated_word || word.word}`;
+	// Step 3: Poll for completion (max ~2 minutes for a 60s chunk)
+	const maxAttempts = 30;
+	for (let i = 0; i < maxAttempts; i++) {
+		await new Promise((resolve) => setTimeout(resolve, 3000)); // Wait 3s between polls
+
+		const pollResponse = await fetch(
+			`https://api.assemblyai.com/v2/transcript/${transcriptId}`,
+			{
+				headers: { Authorization: ASSEMBLYAI_API_KEY! },
+			},
+		);
+
+		if (!pollResponse.ok) {
+			throw new Error(`AssemblyAI poll error: ${await pollResponse.text()}`);
 		}
+
+		const result = await pollResponse.json();
+
+		if (result.status === "completed") {
+			// Format with speaker labels if available
+			if (result.utterances && result.utterances.length > 0) {
+				return result.utterances
+					.map((u: any) => `[Speaker ${u.speaker}]: ${u.text}`)
+					.join("\n");
+			}
+			return result.text || "[No speech detected]";
+		}
+
+		if (result.status === "error") {
+			throw new Error(`AssemblyAI transcription failed: ${result.error}`);
+		}
+
+		// status is "queued" or "processing" — keep polling
 	}
 
-	if (currentSegment) {
-		segments.push(`[Speaker ${currentSpeaker}]: ${currentSegment.trim()}`);
-	}
-
-	return segments.join("\n");
+	throw new Error("AssemblyAI transcription timed out");
 }
 
 // Whisper transcription (fallback)
