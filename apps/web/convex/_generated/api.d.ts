@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as capture from "../capture.js";
 import type * as chat from "../chat.js";
 import type * as chatAgent from "../chatAgent.js";
 import type * as crons from "../crons.js";
@@ -35,6 +36,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  capture: typeof capture;
   chat: typeof chat;
   chatAgent: typeof chatAgent;
   crons: typeof crons;

@@ -460,6 +460,76 @@ export default defineSchema({
 		.index("by_status", ["status"]),
 
 	// SMS Conversations
+	// ─── Live Capture ───
+
+	// A recording session (one per recording period)
+	capture_sessions: defineTable({
+		userId: v.string(),
+		status: v.union(
+			v.literal("recording"),
+			v.literal("paused"),
+			v.literal("stopped"),
+		),
+		title: v.optional(v.string()),
+		startedAt: v.number(),
+		stoppedAt: v.optional(v.number()),
+		totalDurationMs: v.number(),
+		chunkCount: v.number(),
+		// Rolling context for AI extraction
+		currentContext: v.optional(v.string()),
+	}).index("by_user", ["userId"])
+		.index("by_user_and_status", ["userId", "status"]),
+
+	// Individual audio chunks (60s each)
+	capture_chunks: defineTable({
+		sessionId: v.id("capture_sessions"),
+		chunkIndex: v.number(),
+		audioFileId: v.id("_storage"),
+		status: v.union(
+			v.literal("uploaded"),
+			v.literal("transcribing"),
+			v.literal("transcribed"),
+			v.literal("error"),
+		),
+		transcriptText: v.optional(v.string()),
+		durationMs: v.optional(v.number()),
+		processedAt: v.optional(v.number()),
+		errorMessage: v.optional(v.string()),
+	}).index("by_session", ["sessionId", "chunkIndex"])
+		.index("by_status", ["status"]),
+
+	// Tasks extracted from live capture (Sprint 2 — schema only for now)
+	live_tasks: defineTable({
+		userId: v.string(),
+		sessionId: v.id("capture_sessions"),
+		chunkId: v.id("capture_chunks"),
+		description: v.string(),
+		owner: v.union(v.literal("josh"), v.literal("team")),
+		ownerName: v.optional(v.string()),
+		ownerContactId: v.optional(v.id("contacts")),
+		assignedTo: v.optional(v.string()),
+		deadline: v.optional(v.string()),
+		urgency: v.union(v.literal("low"), v.literal("medium"), v.literal("high")),
+		category: v.union(
+			v.literal("task"),
+			v.literal("commitment"),
+			v.literal("decision"),
+			v.literal("follow_up"),
+			v.literal("question"),
+		),
+		sourceText: v.string(),
+		timestamp: v.number(),
+		status: v.union(
+			v.literal("pending"),
+			v.literal("approved"),
+			v.literal("dismissed"),
+			v.literal("converted"),
+		),
+		taskId: v.optional(v.id("tasks")),
+	}).index("by_user", ["userId"])
+		.index("by_session", ["sessionId"])
+		.index("by_user_and_status", ["userId", "status"]),
+
 	sms_conversations: defineTable({
 		userId: v.string(),
 		phoneNumber: v.string(),

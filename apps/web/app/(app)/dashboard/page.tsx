@@ -2,8 +2,9 @@
 
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { HomeChat } from "@/components/home-chat";
+import { LiveCaptureBar, TranscriptViewer } from "@/components/live-capture";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Mail, MessageCircle, Clock, ChevronRight } from "lucide-react";
+import { Calendar, Mail, MessageCircle, Clock, ChevronRight, Mic } from "lucide-react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import Link from "next/link";
@@ -88,6 +89,30 @@ function QuickGlance() {
 	);
 }
 
+function CapturePanel() {
+	const activeSession = useQuery(api.capture.getActiveSession, { userId: "josh" });
+
+	return (
+		<div className="space-y-3">
+			<div className="flex items-center gap-1.5 mb-1">
+				<Mic className="h-3.5 w-3.5 text-muted-foreground" />
+				<span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+					Live Capture
+				</span>
+			</div>
+			<LiveCaptureBar />
+			{activeSession && activeSession.status !== "stopped" && (
+				<div className="glass-card rounded-xl p-3">
+					<p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+						Live Transcript
+					</p>
+					<TranscriptViewer sessionId={activeSession._id} />
+				</div>
+			)}
+		</div>
+	);
+}
+
 function DashboardContent() {
 	const user = { name: "Josh", email: "josh@onflourish.com" };
 
@@ -105,12 +130,21 @@ function DashboardContent() {
 					<HomeChat />
 				</div>
 
-				{/* Right sidebar — quick glance (desktop only) */}
-				<div className="hidden lg:block w-[280px] shrink-0 border-l border-border/30 p-4 overflow-y-auto">
-					<p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-						At a Glance
-					</p>
-					<QuickGlance />
+				{/* Right sidebar — quick glance + capture (desktop only) */}
+				<div className="hidden lg:block w-[300px] shrink-0 border-l border-border/30 p-4 overflow-y-auto space-y-6">
+					{/* Live Capture */}
+					<CapturePanel />
+
+					{/* Divider */}
+					<div className="border-t border-border/30" />
+
+					{/* At a Glance */}
+					<div>
+						<p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+							At a Glance
+						</p>
+						<QuickGlance />
+					</div>
 				</div>
 			</div>
 		</DashboardLayout>
