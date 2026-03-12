@@ -1,32 +1,96 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { MessageSquare, X, Send, Plus, Loader2 } from "lucide-react";
+import { MessageSquare, X, Send, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { useQuery } from "convex/react";
+import { useQuery, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
+
+// Simple markdown-ish rendering: bold, bullet lists, line breaks
+function renderMessage(text: string) {
+	const lines = text.split("\n");
+	const elements: React.ReactNode[] = [];
+
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
+
+		// Bullet list items
+		if (line.match(/^[\s]*[-•]\s/)) {
+			const content = line.replace(/^[\s]*[-•]\s/, "");
+			elements.push(
+				<div key={i} className="flex gap-1.5 ml-1">
+					<span className="text-muted-foreground">•</span>
+					<span>{renderInline(content)}</span>
+				</div>,
+			);
+			continue;
+		}
+
+		// Numbered list items
+		if (line.match(/^[\s]*\d+\.\s/)) {
+			const match = line.match(/^[\s]*(\d+)\.\s(.*)/);
+			if (match) {
+				elements.push(
+					<div key={i} className="flex gap-1.5 ml-1">
+						<span className="text-muted-foreground">{match[1]}.</span>
+						<span>{renderInline(match[2])}</span>
+					</div>,
+				);
+				continue;
+			}
+		}
+
+		// Empty line = paragraph break
+		if (line.trim() === "") {
+			elements.push(<div key={i} className="h-2" />);
+			continue;
+		}
+
+		// Regular line
+		elements.push(
+			<div key={i}>{renderInline(line)}</div>,
+		);
+	}
+
+	return <>{elements}</>;
+}
+
+function renderInline(text: string) {
+	// Handle **bold** and *italic*
+	const parts: React.ReactNode[] = [];
+	let remaining = text;
+	let key = 0;
+
+	while (remaining.length > 0) {
+		// Bold
+		const boldMatch = remaining.match(/\*\*(.+?)\*\*/);
+		if (boldMatch && boldMatch.index !== undefined) {
+			if (boldMatch.index > 0) {
+				parts.push(<span key={key++}>{remaining.slice(0, boldMatch.index)}</span>);
+			}
+			parts.push(<strong key={key++}>{boldMatch[1]}</strong>);
+			remaining = remaining.slice(boldMatch.index + boldMatch[0].length);
+			continue;
+		}
+
+		// No more matches
+		parts.push(<span key={key++}>{remaining}</span>);
+		break;
+	}
+
+	return <>{parts}</>;
+}
 
 export function ChatInterface() {
 	const [isOpen, setIsOpen] = useState(false);
 	const [message, setMessage] = useState("");
 	const [sending, setSending] = useState(false);
-	const [messages, setMessages] = useState<
-		Array<{ role: "user" | "assistant"; content: string; time: string }>
-	>([
-		{
-			role: "assistant",
-			content: "Hi Josh! I'm Flobot, your AI Chief of Staff. I can help with your team, OKRs, meeting actions, and more. What do you need?",
-			time: fmt(new Date()),
-		},
-	]);
 	const endRef = useRef<HTMLDivElement>(null);
 
-	// Team context for chat
-	const teamMembers = useQuery(api.team.listTeamMembers, { userId: "josh" });
-	const okrDashboard = useQuery(api.okrs.getOKRDashboard, { userId: "josh" });
-	const actionCounts = useQuery(api.meetingActions.getActionCounts, { userId: "josh" });
-	const skillCoverage = useQuery(api.team.getSkillCoverage, { userId: "josh" });
+	// Load persisted messages from Convex
+	const storedMessages = useQuery(api.chat.getMessages, { userId: "josh", limit: 50 });
+	const processMessage = useAction(api.chat.processMessage);
 
 	function fmt(d: Date) {
 		return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
@@ -34,86 +98,40 @@ export function ChatInterface() {
 
 	useEffect(() => {
 		endRef.current?.scrollIntoView({ behavior: "smooth" });
-	}, [messages]);
-
-	// Build team context summary for the chat
-	function buildTeamContext(): string {
-		const parts: string[] = [];
-		if (teamMembers && teamMembers.length > 0) {
-			const memberList = teamMembers.map((m) => {
-				let info = m.name;
-				if (m.role) info += ` (${m.role})`;
-				if (m.department) info += ` — ${m.department}`;
-				if (m.skills?.length) info += ` [${m.skills.length} skills]`;
-				return info;
-			}).join("; ");
-			parts.push(`Team (${teamMembers.length} members): ${memberList}`);
-		}
-		if (okrDashboard) {
-			parts.push(`OKRs: ${okrDashboard.activeCount} active, ${okrDashboard.overallProgress}% overall progress. RAG: ${okrDashboard.ragBreakdown.green} green, ${okrDashboard.ragBreakdown.amber} amber, ${okrDashboard.ragBreakdown.red} red`);
-			if (okrDashboard.objectives.length > 0) {
-				const objList = okrDashboard.objectives.map((o: any) => `"${o.title}" (${o.progress}%, ${o.ragStatus})`).join("; ");
-				parts.push(`Active objectives: ${objList}`);
-			}
-		}
-		if (actionCounts) {
-			parts.push(`Meeting actions: ${actionCounts.pending} pending review, ${actionCounts.confirmed} confirmed, ${actionCounts.total} total`);
-		}
-		if (skillCoverage) {
-			parts.push(`Skills: ${skillCoverage.coveragePercent}% coverage (${skillCoverage.coveredSkills}/${skillCoverage.totalSkills} skills covered across ${skillCoverage.teamSize} members)`);
-		}
-		return parts.length > 0 ? `\n\nTeam Context:\n${parts.join("\n")}` : "";
-	}
+	}, [storedMessages, sending]);
 
 	const handleSend = async () => {
 		if (!message.trim() || sending) return;
 		const userMsg = message.trim();
-		setMessages((p) => [...p, { role: "user", content: userMsg, time: fmt(new Date()) }]);
 		setMessage("");
 		setSending(true);
 
-		// Build contextual response
-		const teamContext = buildTeamContext();
-		const lowerMsg = userMsg.toLowerCase();
-
-		let response: string;
-
-		// Simple keyword-based responses with team context
-		if (lowerMsg.includes("team") && (lowerMsg.includes("who") || lowerMsg.includes("member") || lowerMsg.includes("list"))) {
-			if (teamMembers && teamMembers.length > 0) {
-				const list = teamMembers.map((m) => `• ${m.name}${m.role ? ` — ${m.role}` : ""}${m.department ? ` (${m.department})` : ""}`).join("\n");
-				response = `Here's your team:\n\n${list}\n\nTotal: ${teamMembers.length} members`;
-			} else {
-				response = "No team members found yet. Mark contacts as 'coworker' or 'team member' in People to build your team.";
-			}
-		} else if (lowerMsg.includes("okr") || lowerMsg.includes("objective") || lowerMsg.includes("key result")) {
-			if (okrDashboard && okrDashboard.objectives.length > 0) {
-				const list = okrDashboard.objectives.map((o: any) => `• ${o.title} — ${o.progress}% (${o.ragStatus})`).join("\n");
-				response = `Active OKRs (${okrDashboard.overallProgress}% overall):\n\n${list}`;
-			} else {
-				response = "No active OKRs yet. Head to Team → OKRs to create your first objective.";
-			}
-		} else if (lowerMsg.includes("skill") && (lowerMsg.includes("gap") || lowerMsg.includes("coverage"))) {
-			if (skillCoverage) {
-				response = `Skill coverage: ${skillCoverage.coveragePercent}% — ${skillCoverage.coveredSkills} of ${skillCoverage.totalSkills} skills covered across ${skillCoverage.teamSize} team members.`;
-			} else {
-				response = "Skill data is loading...";
-			}
-		} else if (lowerMsg.includes("action") || lowerMsg.includes("meeting")) {
-			if (actionCounts) {
-				response = `Meeting actions: ${actionCounts.pending} pending review, ${actionCounts.confirmed} confirmed, ${actionCounts.converted} converted to tasks. ${actionCounts.total} total.`;
-			} else {
-				response = "Meeting action data is loading...";
-			}
-		} else {
-			response = `I understand your question. Here's what I know about your team:${teamContext || "\n\nNo team data loaded yet."}\n\nFor a fully powered AI response, connect the Anthropic API key in settings.`;
-		}
-
-		setTimeout(() => {
-			setMessages((p) => [...p, { role: "assistant", content: response, time: fmt(new Date()) }]);
+		try {
+			await processMessage({ userId: "josh", message: userMsg });
+		} catch (error) {
+			console.error("Chat error:", error);
+			// The error will show in the console; messages are persisted so UI updates via query
+		} finally {
 			setSending(false);
-		}, 300);
+		}
 	};
+
+	// Combine stored messages with a default greeting if empty
+	const displayMessages =
+		storedMessages && storedMessages.length > 0
+			? storedMessages.map((msg) => ({
+					role: msg.role as "user" | "assistant",
+					content: msg.content,
+					time: fmt(new Date(msg.timestamp)),
+				}))
+			: [
+					{
+						role: "assistant" as const,
+						content:
+							"Hey Josh! I'm Flobot — your AI Chief of Staff. I can check your calendar, find open slots, and schedule meetings. What do you need?",
+						time: fmt(new Date()),
+					},
+				];
 
 	if (!isOpen) {
 		return (
@@ -133,25 +151,33 @@ export function ChatInterface() {
 			<div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
 				<div className="flex items-center gap-2.5">
 					<Avatar className="h-7 w-7">
-						<AvatarFallback className="bg-primary text-primary-foreground text-[10px] font-bold">F</AvatarFallback>
+						<AvatarFallback className="bg-primary text-primary-foreground text-[10px] font-bold">
+							F
+						</AvatarFallback>
 					</Avatar>
 					<div>
 						<p className="text-sm font-semibold tracking-tight">Flobot</p>
 						<p className="text-[10px] text-muted-foreground">AI Chief of Staff</p>
 					</div>
 				</div>
-				<button type="button" onClick={() => setIsOpen(false)} className="p-1.5 rounded-xl hover:bg-accent transition-colors text-muted-foreground">
+				<button
+					type="button"
+					onClick={() => setIsOpen(false)}
+					className="p-1.5 rounded-xl hover:bg-accent transition-colors text-muted-foreground"
+				>
 					<X className="h-4 w-4" />
 				</button>
 			</div>
 
 			{/* Messages */}
 			<div className="flex-1 px-4 py-4 overflow-y-auto space-y-4">
-				{messages.map((msg, i) => (
+				{displayMessages.map((msg, i) => (
 					<div key={i}>
 						{msg.role === "user" ? (
 							<div className="flex flex-col items-end">
-								<span className="text-[10px] text-muted-foreground mb-1">{msg.time}</span>
+								<span className="text-[10px] text-muted-foreground mb-1">
+									{msg.time}
+								</span>
 								<div className="max-w-[80%] rounded-2xl rounded-tr-lg px-4 py-2.5 bg-primary text-primary-foreground">
 									<p className="text-sm leading-relaxed">{msg.content}</p>
 								</div>
@@ -160,36 +186,80 @@ export function ChatInterface() {
 							<div className="flex flex-col items-start">
 								<div className="flex items-center gap-1.5 mb-1">
 									<Avatar className="h-4 w-4">
-										<AvatarFallback className="text-[8px] bg-primary/10 text-primary">F</AvatarFallback>
+										<AvatarFallback className="text-[8px] bg-primary/10 text-primary">
+											F
+										</AvatarFallback>
 									</Avatar>
-									<span className="text-[10px] text-muted-foreground">{msg.time}</span>
+									<span className="text-[10px] text-muted-foreground">
+										{msg.time}
+									</span>
 								</div>
 								<div className="max-w-[85%] pl-5">
-									<p className="text-sm leading-relaxed text-foreground">{msg.content}</p>
+									<div className="text-sm leading-relaxed text-foreground">
+										{renderMessage(msg.content)}
+									</div>
 								</div>
 							</div>
 						)}
 					</div>
 				))}
+
+				{/* Typing indicator */}
+				{sending && (
+					<div className="flex flex-col items-start">
+						<div className="flex items-center gap-1.5 mb-1">
+							<Avatar className="h-4 w-4">
+								<AvatarFallback className="text-[8px] bg-primary/10 text-primary">
+									F
+								</AvatarFallback>
+							</Avatar>
+							<span className="text-[10px] text-muted-foreground">
+								thinking...
+							</span>
+						</div>
+						<div className="pl-5 flex items-center gap-1">
+							<div className="flex gap-1">
+								<div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:0ms]" />
+								<div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:150ms]" />
+								<div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:300ms]" />
+							</div>
+						</div>
+					</div>
+				)}
+
 				<div ref={endRef} />
 			</div>
 
 			{/* Input */}
 			<div className="px-3 pb-3 pt-1 border-t border-border/30">
-				<form onSubmit={(e) => { e.preventDefault(); handleSend(); }}
-					className="flex items-center gap-1 glass rounded-xl px-2 py-1">
-					<button type="button" className="p-1.5 rounded-lg hover:bg-accent transition-colors text-muted-foreground">
-						<Plus className="h-4 w-4" />
-					</button>
+				<form
+					onSubmit={(e) => {
+						e.preventDefault();
+						handleSend();
+					}}
+					className="flex items-center gap-1 glass rounded-xl px-2 py-1"
+				>
 					<input
 						value={message}
 						onChange={(e) => setMessage(e.target.value)}
-						placeholder="Message..."
-						className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none py-1.5"
+						placeholder="Schedule a meeting, check calendar..."
+						className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none py-1.5 px-1"
 					/>
-					<button type="submit" disabled={!message.trim() || sending}
-						className={cn("p-1.5 rounded-lg transition-all", message.trim() && !sending ? "bg-primary text-primary-foreground" : "text-muted-foreground/40")}>
-						{sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+					<button
+						type="submit"
+						disabled={!message.trim() || sending}
+						className={cn(
+							"p-1.5 rounded-lg transition-all",
+							message.trim() && !sending
+								? "bg-primary text-primary-foreground"
+								: "text-muted-foreground/40",
+						)}
+					>
+						{sending ? (
+							<Loader2 className="h-3.5 w-3.5 animate-spin" />
+						) : (
+							<Send className="h-3.5 w-3.5" />
+						)}
 					</button>
 				</form>
 			</div>

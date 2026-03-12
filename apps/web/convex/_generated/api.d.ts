@@ -9,6 +9,7 @@
  */
 
 import type * as chat from "../chat.js";
+import type * as chatAgent from "../chatAgent.js";
 import type * as crons from "../crons.js";
 import type * as designTokens from "../designTokens.js";
 import type * as devAuth from "../devAuth.js";
@@ -35,6 +36,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   chat: typeof chat;
+  chatAgent: typeof chatAgent;
   crons: typeof crons;
   designTokens: typeof designTokens;
   devAuth: typeof devAuth;
