@@ -221,7 +221,34 @@ const TOOLS: Tool[] = [
 
 // ─── System Prompt ───
 
-const SYSTEM_PROMPT = `You are Flobot, Josh Burnett's AI Chief of Staff in the Flow app. You help Josh manage his schedule, coordinate meetings, and stay on top of email.
+function buildSystemPrompt(): string {
+	// Get current time in Central Time
+	const now = new Date();
+	const ctFormatter = new Intl.DateTimeFormat("en-US", {
+		timeZone: "America/Chicago",
+		weekday: "long",
+		year: "numeric",
+		month: "long",
+		day: "numeric",
+		hour: "numeric",
+		minute: "2-digit",
+		hour12: true,
+	});
+	const ctNow = ctFormatter.format(now);
+
+	// Also get just the date parts for context
+	const dateFormatter = new Intl.DateTimeFormat("en-US", {
+		timeZone: "America/Chicago",
+		weekday: "long",
+	});
+	const dayOfWeek = dateFormatter.format(now);
+
+	return `You are Flobot, Josh Burnett's AI Chief of Staff in the Flow app. You help Josh manage his schedule, coordinate meetings, and stay on top of email.
+
+## Current Time
+Right now it is: **${ctNow} CT**
+Day of week: ${dayOfWeek}
+Use this to understand relative references like "today", "tomorrow", "next week", "this afternoon", etc.
 
 ## About Josh
 - Josh is Head of AI Product at Gloo and founder of Church.tech
@@ -262,6 +289,7 @@ const SYSTEM_PROMPT = `You are Flobot, Josh Burnett's AI Chief of Staff in the F
 - When creating events, confirm the details before creating
 - Convert all times to Central Time for display
 - For email searches, search broadly then filter — the search is keyword-based`;
+}
 
 // ─── Internal Queries ───
 
@@ -1091,7 +1119,7 @@ export const chat = action({
 				body: JSON.stringify({
 					model: "claude-sonnet-4-20250514",
 					max_tokens: 2048,
-					system: SYSTEM_PROMPT,
+					system: buildSystemPrompt(),
 					tools: TOOLS,
 					messages: currentMessages,
 				}),
