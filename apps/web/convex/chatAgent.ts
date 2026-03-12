@@ -161,6 +161,25 @@ const TOOLS: Tool[] = [
 		},
 	},
 	{
+		name: "search_gloo_directory",
+		description:
+			"Search the Gloo.us Google Workspace directory for coworkers by name. Returns their name, email, title, and department. Use this to find anyone at Gloo when scheduling meetings or looking up colleagues. Can also read their calendar availability via FreeBusy since they're in the same org.",
+		input_schema: {
+			type: "object",
+			properties: {
+				query: {
+					type: "string",
+					description: "Name or partial name to search for in the Gloo directory",
+				},
+				pageSize: {
+					type: "number",
+					description: "Max results (default: 10)",
+				},
+			},
+			required: ["query"],
+		},
+	},
+	{
 		name: "search_emails",
 		description:
 			"Search Josh's emails by keyword, sender name, or subject. Returns matching emails with subject, sender, body snippet, and triage status.",
@@ -262,9 +281,15 @@ Use this to understand relative references like "today", "tomorrow", "next week"
 - Default calendar for new events: josh@onflourish.com
 - Buffer time between back-to-back meetings is appreciated
 
+## Gloo Directory
+- You have access to the full Gloo.us Google Workspace directory via search_gloo_directory
+- This lets you find any Gloo coworker by name and get their email, title, department
+- Since they're in the same org, you can also check their calendar availability via FreeBusy
+- When Josh mentions a Gloo colleague by first name, search the directory to find them
+
 ## How to Schedule
-1. When Josh asks to schedule with someone, first use lookup_contact to find their email if he used a name
-2. Use find_open_slots to check mutual availability
+1. When Josh asks to schedule with someone, first use search_gloo_directory (for Gloo people) or lookup_contact (for others) to find their email
+2. Use find_open_slots to check mutual availability — this works especially well for Gloo coworkers since you can see their calendars
 3. Present 2-3 slot options in a conversational way with times in CT
 4. When Josh picks a slot, use create_event to book it
 5. For external people whose calendars you can't query, propose Josh's open slots and offer to email them the options
@@ -586,8 +611,9 @@ async function handleCheckAvailability(
 		}
 	}
 
-	// Use the first connection's token (any authenticated account can query FreeBusy)
-	const accessToken = await refreshTokenIfNeeded(ctx, connections[0]._id);
+	// Prefer gloo.us token for FreeBusy — gives org-level calendar visibility
+	const glooConn = connections.find((c: any) => c.email.endsWith("@gloo.us"));
+	const accessToken = await refreshTokenIfNeeded(ctx, (glooConn || connections[0])._id);
 
 	const freeBusyResponse = await fetch(
 		"https://www.googleapis.com/calendar/v3/freeBusy",
@@ -675,7 +701,9 @@ async function handleFindOpenSlots(
 	const joshEmails = connections.map((c: any) => c.email);
 	const allEmails = [...joshEmails, ...attendeeEmails.filter((e: string) => !joshEmails.includes(e))];
 
-	const accessToken = await refreshTokenIfNeeded(ctx, connections[0]._id);
+	// Prefer gloo.us token for org-level calendar visibility
+	const glooConn = connections.find((c: any) => c.email.endsWith("@gloo.us"));
+	const accessToken = await refreshTokenIfNeeded(ctx, (glooConn || connections[0])._id);
 
 	const freeBusyResponse = await fetch(
 		"https://www.googleapis.com/calendar/v3/freeBusy",
@@ -957,6 +985,115 @@ async function handleLookupContact(
 	return JSON.stringify({ results });
 }
 
+async function handleSearchGlooDirectory(
+	ctx: any,
+	input: Record<string, unknown>,
+): Promise<string> {
+	const { query, pageSize = 10 } = input as { query: string; pageSize?: number };
+
+	// Get the gloo.us connection for org directory access
+	const connections = await ctx.runQuery(internal.chatAgent.getAllConnections, {
+		userId: "josh",
+	});
+
+	const glooConnection = connections.find((c: any) => c.email.endsWith("@gloo.us"));
+	if (!glooConnection) {
+		return JSON.stringify({
+			error: "No Gloo.us Google account connected. Cannot search org directory.",
+		});
+	}
+
+	const accessToken = await refreshTokenIfNeeded(ctx, glooConnection._id);
+
+	// Search the Google Workspace directory using People API
+	const searchUrl = new URL("https://people.googleapis.com/v1/people:searchDirectoryPeople");
+	searchUrl.searchParams.set("query", query);
+	searchUrl.searchParams.set("readMask", "names,emailAddresses,organizations,photos");
+	searchUrl.searchParams.set("sources", "DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE");
+	searchUrl.searchParams.set("pageSize", String(Math.min(pageSize, 20)));
+
+	const response = await fetch(searchUrl.toString(), {
+		headers: { Authorization: `Bearer ${accessToken}` },
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		// If directory API isn't available, try the contacts API as fallback
+		if (response.status === 403) {
+			return await searchGlooViaContacts(ctx, accessToken, query, pageSize);
+		}
+		return JSON.stringify({ error: `Directory API error: ${errorText}` });
+	}
+
+	const data = await response.json();
+	const people = data.people || [];
+
+	if (people.length === 0) {
+		return JSON.stringify({
+			results: [],
+			message: `No one found matching "${query}" in the Gloo directory.`,
+		});
+	}
+
+	const results = people.map((person: any) => {
+		const name = person.names?.[0]?.displayName || "Unknown";
+		const email = person.emailAddresses?.[0]?.value || null;
+		const org = person.organizations?.[0] || {};
+		return {
+			name,
+			email,
+			title: org.title || null,
+			department: org.department || null,
+		};
+	});
+
+	return JSON.stringify({ results });
+}
+
+// Fallback: search via Google Contacts/People API if directory search requires extra scopes
+async function searchGlooViaContacts(
+	ctx: any,
+	accessToken: string,
+	query: string,
+	pageSize: number,
+): Promise<string> {
+	// Try listing connections with a search
+	const searchUrl = new URL("https://people.googleapis.com/v1/people:searchContacts");
+	searchUrl.searchParams.set("query", query);
+	searchUrl.searchParams.set("readMask", "names,emailAddresses,organizations");
+	searchUrl.searchParams.set("pageSize", String(Math.min(pageSize, 20)));
+
+	const response = await fetch(searchUrl.toString(), {
+		headers: { Authorization: `Bearer ${accessToken}` },
+	});
+
+	if (!response.ok) {
+		return JSON.stringify({
+			error: "Could not search Gloo directory. May need to add directory scopes to the Google OAuth connection.",
+			suggestion: "Try searching by email directly or ask Josh for the person's email.",
+		});
+	}
+
+	const data = await response.json();
+	const results = (data.results || []).map((r: any) => {
+		const person = r.person;
+		const name = person.names?.[0]?.displayName || "Unknown";
+		const email = person.emailAddresses?.[0]?.value || null;
+		const org = person.organizations?.[0] || {};
+		return {
+			name,
+			email,
+			title: org.title || null,
+			department: org.department || null,
+		};
+	});
+
+	return JSON.stringify({
+		results,
+		note: "Results from Google Contacts (not full org directory). Some coworkers may be missing.",
+	});
+}
+
 // ─── Email Tool Handlers ───
 
 async function handleSearchEmails(
@@ -1065,6 +1202,8 @@ async function executeTool(
 			return handleGetMyCalendar(ctx, input);
 		case "lookup_contact":
 			return handleLookupContact(ctx, input);
+		case "search_gloo_directory":
+			return handleSearchGlooDirectory(ctx, input);
 		case "search_emails":
 			return handleSearchEmails(ctx, input);
 		case "get_email_thread":
