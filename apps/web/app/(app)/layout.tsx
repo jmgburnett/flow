@@ -1,4 +1,5 @@
 import { ConvexClientProvider } from "@/components/providers/convex-provider";
+import { CaptureProvider } from "@/components/providers/capture-provider";
 import { getToken } from "@/lib/auth";
 
 export default async function AppLayout({
@@ -10,7 +11,9 @@ export default async function AppLayout({
 
 	return (
 		<ConvexClientProvider initialToken={token}>
-			<div className="min-h-screen">{children}</div>
+			<CaptureProvider>
+				<div className="min-h-screen">{children}</div>
+			</CaptureProvider>
 		</ConvexClientProvider>
 	);
 }

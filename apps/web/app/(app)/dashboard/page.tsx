@@ -10,6 +10,7 @@ import { Calendar, Mail, MessageCircle, Clock, ChevronRight, Mic, Zap, FileText 
 import { cn } from "@/lib/utils";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useCapture } from "@/components/providers/capture-provider";
 import Link from "next/link";
 
 function QuickGlance() {
@@ -93,8 +94,10 @@ type RightPanelTab = "feed" | "transcript" | "glance";
 
 function RightSidebar() {
 	const [activeTab, setActiveTab] = useState<RightPanelTab>("feed");
+	const { isRecording, sessionId } = useCapture();
 	const activeSession = useQuery(api.capture.getActiveSession, { userId: "josh" });
-	const isRecording = activeSession && activeSession.status !== "stopped";
+	// Use context sessionId if recording, otherwise check DB for recent session
+	const effectiveSessionId = sessionId ?? activeSession?._id;
 
 	return (
 		<div className="flex flex-col h-full">
@@ -152,11 +155,11 @@ function RightSidebar() {
 			{/* Tab content */}
 			<div className="flex-1 overflow-hidden">
 				{activeTab === "feed" && (
-					<LiveFeed sessionId={isRecording ? activeSession._id : undefined} />
+					<LiveFeed sessionId={effectiveSessionId} />
 				)}
-				{activeTab === "transcript" && isRecording && (
+				{activeTab === "transcript" && effectiveSessionId && (
 					<div className="p-4 overflow-y-auto h-full">
-						<TranscriptViewer sessionId={activeSession._id} />
+						<TranscriptViewer sessionId={effectiveSessionId} />
 					</div>
 				)}
 				{activeTab === "glance" && (

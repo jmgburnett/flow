@@ -13,6 +13,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ChatInterface } from "@/components/chat-interface";
+import { GlobalCaptureIndicator } from "@/components/live-capture";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
 	Home,
@@ -201,6 +202,7 @@ export function DashboardLayout({ children, user }: DashboardLayoutProps) {
 			</nav>
 
 			<ChatInterface />
+			<GlobalCaptureIndicator />
 		</div>
 	);
 }
