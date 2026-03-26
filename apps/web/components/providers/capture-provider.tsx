@@ -139,7 +139,7 @@ export function CaptureProvider({ children }: { children: ReactNode }) {
 		}
 		const { token } = await res.json();
 
-		const wsUrl = `${ASSEMBLYAI_WS_URL}?sample_rate=${SAMPLE_RATE}&speech_model=nano&token=${token}`;
+		const wsUrl = `${ASSEMBLYAI_WS_URL}?sample_rate=${SAMPLE_RATE}&token=${token}`;
 		const ws = new WebSocket(wsUrl);
 		wsRef.current = ws;
 
@@ -260,14 +260,8 @@ export function CaptureProvider({ children }: { children: ReactNode }) {
 			workletNode.port.onmessage = (event: MessageEvent<ArrayBuffer>) => {
 				const ws = wsRef.current;
 				if (ws?.readyState === WebSocket.OPEN) {
-					// AssemblyAI expects base64-encoded PCM16
-					const bytes = new Uint8Array(event.data);
-					let binary = "";
-					for (let i = 0; i < bytes.byteLength; i++) {
-						binary += String.fromCharCode(bytes[i]);
-					}
-					const base64 = btoa(binary);
-					ws.send(JSON.stringify({ audio_data: base64 }));
+					// v3 Universal Streaming expects raw binary PCM16 frames
+					ws.send(event.data);
 				}
 			};
 
