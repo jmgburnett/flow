@@ -604,34 +604,83 @@ export default defineSchema({
     journalTime: v.optional(v.string()), // "HH:MM" 24h format
     journalTimezone: v.optional(v.string()), // e.g. "America/Denver"
     journalEnabled: v.optional(v.boolean()),
+    journalTheme: v.optional(v.string()), // "field-notes" | "moleskine" | "night"
   }).index("by_user", ["userId"]),
 
-  // AI-generated daily journals
+  // AI-generated daily journals (Field Notes v2 format)
   journals: defineTable({
     userId: v.string(),
     date: v.string(), // YYYY-MM-DD
     title: v.string(),
-    summary: v.string(),
-    sections: v.array(
+    status: v.string(), // "generating" | "complete" | "failed"
+    generatedAt: v.number(),
+
+    // ── Field Notes v2 fields ──
+    epigraph: v.optional(v.string()),
+    mood: v.optional(v.string()),
+    wins: v.optional(v.array(v.string())),
+    meetings: v.optional(
+      v.array(
+        v.object({
+          approximate_time: v.string(),
+          name: v.string(),
+          type: v.string(),
+          attendees: v.array(v.string()),
+          summary: v.string(),
+          decisions: v.array(v.string()),
+          action_items: v.array(
+            v.object({ owner: v.string(), action: v.string() }),
+          ),
+          confidence: v.string(),
+        }),
+      ),
+    ),
+    falling_through_cracks: v.optional(
+      v.array(v.object({ text: v.string(), urgency: v.string() })),
+    ),
+    master_action_list: v.optional(
       v.object({
-        type: v.string(), // "morning_context" | "key_conversations" | etc.
-        title: v.string(),
-        content: v.string(),
-        timeRange: v.optional(v.object({ start: v.string(), end: v.string() })),
+        josh_only: v.array(v.string()),
+        delegated: v.array(v.string()),
+        engineering: v.array(v.string()),
+        scheduling: v.array(v.string()),
       }),
     ),
-    mood: v.optional(v.string()),
-    keyDecisions: v.array(v.string()),
-    actionItems: v.array(v.object({ text: v.string(), priority: v.string() })),
-    peopleMetioned: v.array(v.string()),
-    themes: v.array(v.string()),
-    wordCount: v.number(),
-    captureMinutes: v.number(),
-    generatedAt: v.number(),
-    status: v.string(), // "generating" | "complete" | "failed"
+    conversation_count: v.optional(v.number()),
+    action_item_count: v.optional(v.number()),
+    capture_minutes: v.optional(v.number()),
+    // Denormalized text for full-text search
+    searchText: v.optional(v.string()),
+
+    // ── Legacy v1 fields (optional for backwards compat) ──
+    summary: v.optional(v.string()),
+    sections: v.optional(
+      v.array(
+        v.object({
+          type: v.string(),
+          title: v.string(),
+          content: v.string(),
+          timeRange: v.optional(
+            v.object({ start: v.string(), end: v.string() }),
+          ),
+        }),
+      ),
+    ),
+    keyDecisions: v.optional(v.array(v.string())),
+    actionItems: v.optional(
+      v.array(v.object({ text: v.string(), priority: v.string() })),
+    ),
+    peopleMetioned: v.optional(v.array(v.string())),
+    themes: v.optional(v.array(v.string())),
+    wordCount: v.optional(v.number()),
+    captureMinutes: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
-    .index("by_user_and_date", ["userId", "date"]),
+    .index("by_user_and_date", ["userId", "date"])
+    .searchIndex("search_content", {
+      searchField: "searchText",
+      filterFields: ["userId"],
+    }),
 
   // Real-time streaming transcript segments
   transcript_segments: defineTable({

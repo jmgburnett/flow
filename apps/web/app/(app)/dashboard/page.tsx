@@ -180,8 +180,8 @@ function TodaysJournalCard() {
           <>
             <p className="text-sm font-medium truncate">{journal.title}</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">
-              {journal.wordCount.toLocaleString()} words ·{" "}
-              {journal.captureMinutes}m captured
+              {(journal.wordCount ?? 0).toLocaleString()} words ·{" "}
+              {journal.captureMinutes ?? journal.capture_minutes ?? 0}m captured
             </p>
           </>
         ) : (
