@@ -9,5 +9,5 @@ export async function POST() {
 	// Universal Streaming uses the API key directly — no token endpoint needed.
 	// Return the key so the client can connect to wss://api.assemblyai.com/v2/realtime/ws
 	// The key is short-lived in the browser context (WebSocket connection only).
-	return NextResponse.json({ token: apiKey });
+	return NextResponse.json({ token: apiKey.trim() });
 }
