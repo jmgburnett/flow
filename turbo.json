@@ -9,6 +9,13 @@
         ".next/**",
         "!.next/cache/**",
         "dist/**"
+      ],
+      "env": [
+        "ASSEMBLYAI_API_KEY",
+        "NEXT_PUBLIC_CONVEX_URL",
+        "NEXT_PUBLIC_CONVEX_SITE_URL",
+        "CONVEX_DEPLOYMENT",
+        "BETTER_AUTH_SECRET"
       ]
     },
     "dev": {
