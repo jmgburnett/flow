@@ -6,21 +6,8 @@ export async function POST() {
 		return NextResponse.json({ error: "AssemblyAI API key not configured" }, { status: 500 });
 	}
 
-	const response = await fetch("https://api.assemblyai.com/v2/realtime/token", {
-		method: "POST",
-		headers: {
-			Authorization: apiKey,
-			"Content-Type": "application/json",
-		},
-		body: JSON.stringify({ expires_in: 3600 }),
-	});
-
-	if (!response.ok) {
-		const text = await response.text();
-		console.error("AssemblyAI token error:", text);
-		return NextResponse.json({ error: "Failed to create session token" }, { status: 502 });
-	}
-
-	const data = await response.json();
-	return NextResponse.json({ token: data.token });
+	// Universal Streaming uses the API key directly — no token endpoint needed.
+	// Return the key so the client can connect to wss://api.assemblyai.com/v2/realtime/ws
+	// The key is short-lived in the browser context (WebSocket connection only).
+	return NextResponse.json({ token: apiKey });
 }
