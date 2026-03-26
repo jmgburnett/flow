@@ -668,11 +668,12 @@ export const getLiveTasks = query({
 	},
 	handler: async (ctx, args) => {
 		let tasks;
+		const sessionId = args.sessionId;
 
-		if (args.sessionId) {
+		if (sessionId) {
 			tasks = await ctx.db
 				.query("live_tasks")
-				.withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
+				.withIndex("by_session", (q) => q.eq("sessionId", sessionId))
 				.collect();
 		} else {
 			tasks = await ctx.db
@@ -706,10 +707,11 @@ export const getLiveTaskCounts = query({
 	},
 	handler: async (ctx, args) => {
 		let tasks;
-		if (args.sessionId) {
+		const sessionId = args.sessionId;
+		if (sessionId) {
 			tasks = await ctx.db
 				.query("live_tasks")
-				.withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
+				.withIndex("by_session", (q) => q.eq("sessionId", sessionId))
 				.collect();
 		} else {
 			tasks = await ctx.db
@@ -771,6 +773,230 @@ export const convertLiveTask = mutation({
 		});
 
 		return taskId;
+	},
+});
+
+// ─── Real-Time Streaming ───
+
+// Store a final transcript segment from WebSocket stream
+export const storeTranscriptSegment = mutation({
+	args: {
+		sessionId: v.id("capture_sessions"),
+		text: v.string(),
+		speaker: v.optional(v.string()),
+		startMs: v.number(),
+		endMs: v.number(),
+		isFinal: v.boolean(),
+		timestamp: v.number(),
+	},
+	handler: async (ctx, args) => {
+		const id = await ctx.db.insert("transcript_segments", args);
+
+		// Every 10 final segments, trigger a summary update
+		if (args.isFinal) {
+			const finalSegments = await ctx.db
+				.query("transcript_segments")
+				.withIndex("by_session_and_final", (q) =>
+					q.eq("sessionId", args.sessionId).eq("isFinal", true),
+				)
+				.collect();
+
+			if (finalSegments.length > 0 && finalSegments.length % 10 === 0) {
+				await ctx.scheduler.runAfter(0, internal.capture.updateSessionSummary, {
+					sessionId: args.sessionId,
+				});
+			}
+		}
+
+		return id;
+	},
+});
+
+// Update partial transcript on session (for live display without storing each partial)
+export const storePartialTranscript = mutation({
+	args: {
+		sessionId: v.id("capture_sessions"),
+		partialText: v.string(),
+	},
+	handler: async (ctx, args) => {
+		await ctx.db.patch(args.sessionId, { currentContext: args.partialText });
+	},
+});
+
+// Get transcript segments for a session
+export const getTranscriptSegments = query({
+	args: { sessionId: v.id("capture_sessions") },
+	handler: async (ctx, args) => {
+		return await ctx.db
+			.query("transcript_segments")
+			.withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
+			.order("asc")
+			.collect();
+	},
+});
+
+// Get session summary
+export const getSessionSummary = query({
+	args: { sessionId: v.id("capture_sessions") },
+	handler: async (ctx, args) => {
+		return await ctx.db
+			.query("session_summaries")
+			.withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
+			.first();
+	},
+});
+
+// Internal: get all final segments for summary generation
+export const getFinalSegments = internalQuery({
+	args: { sessionId: v.id("capture_sessions") },
+	handler: async (ctx, args) => {
+		return await ctx.db
+			.query("transcript_segments")
+			.withIndex("by_session_and_final", (q) =>
+				q.eq("sessionId", args.sessionId).eq("isFinal", true),
+			)
+			.order("asc")
+			.collect();
+	},
+});
+
+// Internal: upsert session summary
+export const upsertSessionSummary = internalMutation({
+	args: {
+		sessionId: v.id("capture_sessions"),
+		summary: v.string(),
+		topics: v.array(v.string()),
+		actionItems: v.array(v.object({
+			description: v.string(),
+			assignedTo: v.optional(v.string()),
+			urgency: v.string(),
+		})),
+		peopleMentioned: v.optional(v.array(v.object({
+			name: v.string(),
+			context: v.optional(v.string()),
+		}))),
+		segmentCount: v.number(),
+	},
+	handler: async (ctx, args) => {
+		const existing = await ctx.db
+			.query("session_summaries")
+			.withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
+			.first();
+
+		const data = {
+			sessionId: args.sessionId,
+			summary: args.summary,
+			topics: args.topics,
+			actionItems: args.actionItems,
+			peopleMentioned: args.peopleMentioned,
+			updatedAt: Date.now(),
+			segmentCount: args.segmentCount,
+		};
+
+		if (existing) {
+			await ctx.db.patch(existing._id, data);
+		} else {
+			await ctx.db.insert("session_summaries", data);
+		}
+	},
+});
+
+// Action: generate/update session summary using Claude
+export const updateSessionSummary = internalAction({
+	args: { sessionId: v.id("capture_sessions") },
+	handler: async (ctx, args) => {
+		const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+		if (!ANTHROPIC_API_KEY) {
+			console.warn("ANTHROPIC_API_KEY not set, skipping summary generation");
+			return;
+		}
+
+		const segments = await ctx.runQuery(internal.capture.getFinalSegments, {
+			sessionId: args.sessionId,
+		});
+
+		if (segments.length === 0) return;
+
+		const transcriptText = segments
+			.map((s) => {
+				const time = new Date(s.startMs).toISOString().substr(11, 8);
+				const speaker = s.speaker ? `[${s.speaker}] ` : "";
+				return `[${time}] ${speaker}${s.text}`;
+			})
+			.join("\n");
+
+		const response = await fetch("https://api.anthropic.com/v1/messages", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"x-api-key": ANTHROPIC_API_KEY,
+				"anthropic-version": "2023-06-01",
+			},
+			body: JSON.stringify({
+				model: "claude-haiku-4-5-20251001",
+				max_tokens: 1500,
+				messages: [
+					{
+						role: "user",
+						content: `Analyze this live meeting/conversation transcript and provide a structured summary.
+
+Transcript:
+${transcriptText.slice(0, 8000)}
+
+Respond with ONLY valid JSON matching this structure:
+{
+  "summary": "2-4 sentence paragraph summarizing the conversation",
+  "topics": ["topic1", "topic2", "topic3"],
+  "actionItems": [
+    { "description": "action item", "assignedTo": "person name or null", "urgency": "high|medium|low" }
+  ],
+  "peopleMentioned": [
+    { "name": "person name", "context": "brief context about their role/relationship" }
+  ]
+}`,
+					},
+				],
+			}),
+		});
+
+		if (!response.ok) {
+			console.error("Summary API error:", await response.text());
+			return;
+		}
+
+		const data = await response.json();
+		const text = data.content[0].text.trim();
+
+		let parsed: {
+			summary: string;
+			topics: string[];
+			actionItems: Array<{ description: string; assignedTo?: string; urgency: string }>;
+			peopleMentioned?: Array<{ name: string; context?: string }>;
+		};
+
+		try {
+			const jsonText = text.replace(/^```json?\n?/, "").replace(/\n?```$/, "");
+			parsed = JSON.parse(jsonText);
+		} catch {
+			console.error("Failed to parse summary response:", text);
+			return;
+		}
+
+		await ctx.runMutation(internal.capture.upsertSessionSummary, {
+			sessionId: args.sessionId,
+			summary: parsed.summary,
+			topics: parsed.topics || [],
+			actionItems: (parsed.actionItems || []).map((item) => ({
+				description: item.description,
+				assignedTo: item.assignedTo ?? undefined,
+				urgency: item.urgency || "medium",
+			})),
+			peopleMentioned: parsed.peopleMentioned?.map((p) => ({
+				name: p.name,
+				context: p.context ?? undefined,
+			})),
+			segmentCount: segments.length,
+		});
 	},
 });
 

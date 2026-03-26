@@ -540,4 +540,34 @@ export default defineSchema({
 	}).index("by_user", ["userId"])
 		.index("by_user_and_last_message", ["userId", "lastMessageAt"])
 		.index("by_phone_number", ["phoneNumber"]),
+
+	// Real-time streaming transcript segments
+	transcript_segments: defineTable({
+		sessionId: v.id("capture_sessions"),
+		text: v.string(),
+		speaker: v.optional(v.string()),
+		startMs: v.number(),
+		endMs: v.number(),
+		isFinal: v.boolean(),
+		timestamp: v.number(),
+	}).index("by_session", ["sessionId"])
+		.index("by_session_and_final", ["sessionId", "isFinal"]),
+
+	// AI-generated session summaries
+	session_summaries: defineTable({
+		sessionId: v.id("capture_sessions"),
+		summary: v.string(),
+		topics: v.array(v.string()),
+		actionItems: v.array(v.object({
+			description: v.string(),
+			assignedTo: v.optional(v.string()),
+			urgency: v.string(),
+		})),
+		peopleMentioned: v.optional(v.array(v.object({
+			name: v.string(),
+			context: v.optional(v.string()),
+		}))),
+		updatedAt: v.number(),
+		segmentCount: v.number(),
+	}).index("by_session", ["sessionId"]),
 });

@@ -25,10 +25,11 @@ export function LiveCaptureBar() {
 	const { isRecording, isPaused, elapsed, sessionId, error, start, pause, resume, stop } =
 		useCapture();
 
-	const sessionStats = useQuery(
-		api.capture.getSessionStats,
+	const segments = useQuery(
+		api.capture.getTranscriptSegments,
 		sessionId ? { sessionId } : "skip",
 	);
+	const finalCount = segments?.filter((s) => s.isFinal).length ?? 0;
 
 	if (!isRecording) {
 		return (
@@ -70,9 +71,9 @@ export function LiveCaptureBar() {
 
 				<span className="text-xs text-muted-foreground">
 					{isPaused ? "Paused" : "Recording"}
-					{sessionStats && sessionStats.transcribed > 0 && (
+					{finalCount > 0 && (
 						<span className="ml-1.5 text-primary">
-							· {sessionStats.transcribed} transcribed
+							· {finalCount} segments
 						</span>
 					)}
 				</span>
