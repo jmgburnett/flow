@@ -117,6 +117,7 @@ function PastSessionsList({
     userId: "josh",
     limit: 20,
   });
+  const toggleJournal = useMutation(api.journal.toggleSessionJournal);
 
   const stopped = sessions?.filter((s) => s.status === "stopped") ?? [];
 
@@ -130,8 +131,6 @@ function PastSessionsList({
       </div>
     );
   }
-
-  const toggleJournal = useMutation(api.journal.toggleSessionJournal);
 
   return (
     <div className="overflow-y-auto h-full">
