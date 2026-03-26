@@ -19,5 +19,5 @@ const modules = import.meta.glob("../../convex/**/*.ts");
  * expect(result).toEqual(...);
  */
 export function createConvexTest() {
-	return convexTest(schema, modules);
+  return convexTest(schema, modules);
 }

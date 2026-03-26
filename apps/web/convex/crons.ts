@@ -8,10 +8,10 @@ const crons = cronJobs();
 // Syncs emails + calendar, builds new profiles, filters junk, enriches
 // ═══════════════════════════════════════════════
 crons.daily(
-	"daily-profile-enrichment",
-	{ hourUTC: 12, minuteUTC: 0 },
-	internal.profileBuilder.dailyEnrichmentPipeline,
-	{ userId: "josh" },
+  "daily-profile-enrichment",
+  { hourUTC: 12, minuteUTC: 0 },
+  internal.profileBuilder.dailyEnrichmentPipeline,
+  { userId: "josh" },
 );
 
 // ═══════════════════════════════════════════════
@@ -19,10 +19,10 @@ crons.daily(
 // Pulls latest Cypress tokens from Figma and stores in DB
 // ═══════════════════════════════════════════════
 crons.daily(
-	"daily-figma-token-sync",
-	{ hourUTC: 11, minuteUTC: 0 },
-	internal.designTokens.syncFromFigma,
-	{ fileKey: "UA7g21UklfSbtc2fXvNOHS" },
+  "daily-figma-token-sync",
+  { hourUTC: 11, minuteUTC: 0 },
+  internal.designTokens.syncFromFigma,
+  { fileKey: "UA7g21UklfSbtc2fXvNOHS" },
 );
 
 export default crons;

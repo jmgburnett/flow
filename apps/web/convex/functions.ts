@@ -6,8 +6,8 @@ import { query } from "./_generated/server";
 
 // Example: list all table names (placeholder - replace with your app queries)
 export const hello = query({
-	args: {},
-	handler: async () => {
-		return { message: "Hello from Convex!" };
-	},
+  args: {},
+  handler: async () => {
+    return { message: "Hello from Convex!" };
+  },
 });

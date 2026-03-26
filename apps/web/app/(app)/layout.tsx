@@ -3,17 +3,17 @@ import { CaptureProvider } from "@/components/providers/capture-provider";
 import { getToken } from "@/lib/auth";
 
 export default async function AppLayout({
-	children,
+  children,
 }: {
-	children: React.ReactNode;
+  children: React.ReactNode;
 }) {
-	const token = await getToken();
+  const token = await getToken();
 
-	return (
-		<ConvexClientProvider initialToken={token}>
-			<CaptureProvider>
-				<div className="min-h-screen">{children}</div>
-			</CaptureProvider>
-		</ConvexClientProvider>
-	);
+  return (
+    <ConvexClientProvider initialToken={token}>
+      <CaptureProvider>
+        <div className="min-h-screen">{children}</div>
+      </CaptureProvider>
+    </ConvexClientProvider>
+  );
 }

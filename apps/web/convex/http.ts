@@ -7,9 +7,9 @@ const http = httpRouter();
 authComponent.registerRoutes(http, createAuth);
 
 http.route({
-	path: "/api/dev-auth",
-	method: "POST",
-	handler: devAuth,
+  path: "/api/dev-auth",
+  method: "POST",
+  handler: devAuth,
 });
 
 export default http;

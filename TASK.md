@@ -322,5 +322,80 @@ Since we can't easily get Freight Text/Canela (paid fonts), use these Google Fon
 
 ---
 
+---
+
+## User Stories (for reference — implement what's feasible in v1)
+
+1. Start my day with a single tap and Flow captures everything — no manual notes
+2. Review captured chunks before generating — remove anything unwanted
+3. Open journal at end of day and be surprised by accomplishments — Wins section leads
+4. Navigate journal like flipping through a real book — page-turn experience
+5. Tap audio icon on meeting summary for brief playback (future — v2)
+6. Find any decision/action item from any day via search
+7. Star wins → "Best of" collection (v2)
+8. Audio never leaves device (mobile — future)
+9. Share a specific journal page (v2)
+10. Journal Shelf — visual weight of consistent daily journaling
+
+## V1 Scope (What to Actually Build Now)
+
+Focus on what works with the EXISTING web app + existing transcription:
+- ✅ Journal generation from existing transcript segments (Convex + Claude claude-sonnet-4-6)
+- ✅ Daily Review screen (view/delete/annotate chunks before generation)
+- ✅ Journal UI with cover + page-turn + all 5 sections
+- ✅ Journal Shelf (list view with spines)
+- ✅ Search across journals
+- ✅ Dashboard card + sidebar nav
+- ✅ Schedule prompt (when to auto-generate)
+- ✅ Field Notes theme (default)
+- ✅ Theme switching infrastructure (Moleskine + Night Mode as CSS-only variants)
+- ❌ Skip: on-device Whisper, mobile background capture, audio playback, E2E encryption, sync, monetization gates, starred wins collection
+
+---
+
+---
+
+## AI Journal Output Schema (CRITICAL — UI must map 1:1 to this)
+
+The Claude prompt MUST produce JSON matching this exact tree:
+
+```
+Journal
+├── date
+├── wins[] → Wins Page
+├── meetings[] → Meeting Pages (one per meeting)
+│   ├── approximate_time
+│   ├── name
+│   ├── attendees[]
+│   ├── summary (prose narrative)
+│   └── action_items[]
+│       ├── owner
+│       └── action
+├── falling_through_cracks[] → Cracks Page
+└── master_action_list → Action Pages
+    ├── josh_only[]
+    ├── delegated[] (one bucket per team member)
+    ├── engineering[]
+    ├── hr_legal_ops[]
+    └── scheduling[]
+```
+
+This is the Daily Journal skill schema. Every UI section maps directly to a node in this tree. The Convex schema should store this structure faithfully.
+
+---
+
+## Out of Scope for v1
+- Real-time transcription visible while recording (revisit v2)
+- Video capture
+- Calendar integration for auto-labeling meetings (v2)
+- AI-generated follow-up emails from action items (v2)
+- Team sharing beyond page export (v2)
+- Task management integrations (Things, Todoist, Linear) (v2)
+- Sensitive content auto-detection (v2)
+- Consent/recording indicators for group settings (v2 / legal review)
+- Diarization confidence UI + user corrections (v2)
+
+---
+
 When completely finished, run:
 openclaw system event --text "Done: Built Flow journal feature — AI journal generation, journal UI with page-turn navigation, daily review screen, schedule prompt, dashboard integration" --mode now

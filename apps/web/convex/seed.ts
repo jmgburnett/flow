@@ -9,12 +9,12 @@ import { mutation } from "./_generated/server";
  * Add app-specific seed data here.
  */
 export const seedData = mutation({
-	args: {},
-	handler: async () => {
-		console.log("Seed complete. Add your app-specific seed data here.");
-		console.log(
-			"Auth data (users, sessions) is managed by Better Auth component.",
-		);
-		return { seeded: true };
-	},
+  args: {},
+  handler: async () => {
+    console.log("Seed complete. Add your app-specific seed data here.");
+    console.log(
+      "Auth data (users, sessions) is managed by Better Auth component.",
+    );
+    return { seeded: true };
+  },
 });

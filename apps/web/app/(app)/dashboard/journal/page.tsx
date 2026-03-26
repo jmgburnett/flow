@@ -186,10 +186,14 @@ function ScheduleModal({
 
         <div className="space-y-4">
           <div>
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-1.5">
+            <label
+              htmlFor="journal-time"
+              className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-1.5"
+            >
               Generation time
             </label>
             <input
+              id="journal-time"
               type="time"
               value={time}
               onChange={(e) => setTime(e.target.value)}
@@ -381,8 +385,11 @@ function JournalDetail({
 
       {/* Sections */}
       <div className="space-y-4">
-        {journal.sections.map((section, i) => (
-          <div key={i} className="glass-card rounded-2xl overflow-hidden">
+        {journal.sections.map((section) => (
+          <div
+            key={section.type}
+            className="glass-card rounded-2xl overflow-hidden"
+          >
             <div className="flex items-center gap-2 px-5 py-3.5 border-b border-border/20">
               {sectionIcons[section.type] ?? (
                 <BookOpen className="h-4 w-4 text-muted-foreground" />
@@ -457,9 +464,9 @@ function JournalDetail({
               </span>
             </div>
             <ul className="space-y-1">
-              {journal.keyDecisions.map((d, i) => (
+              {journal.keyDecisions.map((d) => (
                 <li
-                  key={i}
+                  key={d}
                   className="text-xs text-foreground/80 flex items-start gap-2"
                 >
                   <span className="text-primary mt-0.5">▸</span>
@@ -480,8 +487,8 @@ function JournalDetail({
               </span>
             </div>
             <ul className="space-y-1.5">
-              {journal.actionItems.map((item, i) => (
-                <li key={i} className="flex items-start gap-2">
+              {journal.actionItems.map((item) => (
+                <li key={item.text} className="flex items-start gap-2">
                   <span
                     className={cn(
                       "text-xs font-medium mt-0.5 shrink-0",

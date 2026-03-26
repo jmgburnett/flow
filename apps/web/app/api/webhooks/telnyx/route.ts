@@ -27,59 +27,59 @@ const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
  * }
  */
 export async function POST(request: NextRequest) {
-	try {
-		const body = await request.json();
+  try {
+    const body = await request.json();
 
-		// Validate webhook structure
-		if (!body.data || body.data.event_type !== "message.received") {
-			return NextResponse.json(
-				{ error: "Invalid webhook event type" },
-				{ status: 400 },
-			);
-		}
+    // Validate webhook structure
+    if (!body.data || body.data.event_type !== "message.received") {
+      return NextResponse.json(
+        { error: "Invalid webhook event type" },
+        { status: 400 },
+      );
+    }
 
-		const payload = body.data.payload;
+    const payload = body.data.payload;
 
-		// Extract message details
-		const from = payload.from?.phone_number;
-		const to = payload.to?.[0]?.phone_number;
-		const text = payload.text;
+    // Extract message details
+    const from = payload.from?.phone_number;
+    const to = payload.to?.[0]?.phone_number;
+    const text = payload.text;
 
-		if (!from || !to || !text) {
-			return NextResponse.json(
-				{ error: "Missing required fields" },
-				{ status: 400 },
-			);
-		}
+    if (!from || !to || !text) {
+      return NextResponse.json(
+        { error: "Missing required fields" },
+        { status: 400 },
+      );
+    }
 
-		// For now, all messages go to Josh (userId: "josh")
-		// In the future, we can map phone numbers to user IDs
-		const userId = "josh";
+    // For now, all messages go to Josh (userId: "josh")
+    // In the future, we can map phone numbers to user IDs
+    const userId = "josh";
 
-		// Store the message in Convex
-		await convex.mutation(api.sms.receiveMessage, {
-			userId,
-			from,
-			to,
-			body: text,
-		});
+    // Store the message in Convex
+    await convex.mutation(api.sms.receiveMessage, {
+      userId,
+      from,
+      to,
+      body: text,
+    });
 
-		console.log(`SMS received from ${from}: ${text}`);
+    console.log(`SMS received from ${from}: ${text}`);
 
-		return NextResponse.json({ success: true });
-	} catch (error) {
-		console.error("Error processing Telnyx webhook:", error);
-		return NextResponse.json(
-			{ error: "Internal server error" },
-			{ status: 500 },
-		);
-	}
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Error processing Telnyx webhook:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
+  }
 }
 
 // Handle GET requests (for testing/verification)
 export async function GET() {
-	return NextResponse.json({
-		message: "Telnyx webhook endpoint is active",
-		timestamp: new Date().toISOString(),
-	});
+  return NextResponse.json({
+    message: "Telnyx webhook endpoint is active",
+    timestamp: new Date().toISOString(),
+  });
 }
