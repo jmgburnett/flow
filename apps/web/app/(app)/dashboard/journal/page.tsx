@@ -230,7 +230,7 @@ function ScheduleModal({
 	}
 
 	const themes: Array<{ id: ThemeName; label: string; desc: string }> = [
-		{ id: "field-notes", label: "Field Notes", desc: "Warm cream, serif" },
+		{ id: "field-notes", label: "Journal Entry", desc: "Warm cream, serif" },
 		{ id: "moleskine", label: "Moleskine", desc: "Off-white, minimal" },
 		{ id: "night", label: "Night", desc: "Dark with gold accents" },
 	];
@@ -1580,7 +1580,7 @@ function GeneratingState({ theme }: { theme: ThemeName }) {
 						color: t.textPrimary,
 					}}
 				>
-					Generating your Field Notes…
+					Generating your journal entry…
 				</p>
 				<p
 					className="text-sm transition-all duration-500"
@@ -1654,7 +1654,7 @@ function EmptyDay({
 					style={{ fontFamily: "'Lora', serif", color: t.textSecondary }}
 				>
 					{isToday
-						? "Start a capture session and then generate your daily Field Notes."
+						? "Start a capture session and then generate your daily journal entry."
 						: "No journal was generated for this date."}
 				</p>
 				<div className="flex items-center gap-3">
@@ -1782,7 +1782,7 @@ export default function JournalPage() {
 										color: t.textPrimary,
 									}}
 								>
-									Field Notes
+									Journal
 								</h1>
 								<div className="flex items-center gap-1">
 									<button

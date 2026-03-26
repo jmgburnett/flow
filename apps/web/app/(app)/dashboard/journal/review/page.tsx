@@ -204,6 +204,7 @@ export default function ReviewPage() {
 	const sessions = (useQuery(api.journal.getCaptureSessions, {
 		userId: "josh",
 		date,
+		timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
 	}) ?? []) as CaptureSession[];
 
 	const journal = useQuery(api.journal.getJournal, {

@@ -97,11 +97,24 @@ export const getUserPreferences = query({
 });
 
 export const getCaptureSessions = query({
-	args: { userId: v.string(), date: v.string() },
+	args: { userId: v.string(), date: v.string(), timezone: v.optional(v.string()) },
 	handler: async (ctx, args) => {
+		const tz = args.timezone ?? "America/Chicago";
 		const [year, month, day] = args.date.split("-").map(Number);
-		const startOfDay = new Date(year, month - 1, day, 0, 0, 0).getTime();
-		const endOfDay = new Date(year, month - 1, day, 23, 59, 59).getTime();
+		const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+		const startOfDay = new Date(`${dateStr}T00:00:00`);
+		const endOfDay = new Date(`${dateStr}T23:59:59.999`);
+
+		const tzOffsets: Record<string, number> = {
+			"America/New_York": -5, "America/Chicago": -6,
+			"America/Denver": -7, "America/Los_Angeles": -8,
+		};
+		const isDST = month >= 3 && month <= 11;
+		const baseOffset = tzOffsets[tz] ?? -6;
+		const offset = isDST ? baseOffset + 1 : baseOffset;
+
+		const startMs = startOfDay.getTime() - (offset * 60 * 60 * 1000);
+		const endMs = endOfDay.getTime() - (offset * 60 * 60 * 1000);
 
 		const sessions = await ctx.db
 			.query("capture_sessions")
@@ -112,8 +125,8 @@ export const getCaptureSessions = query({
 			.filter(
 				(s) =>
 					s.status === "stopped" &&
-					s.startedAt >= startOfDay &&
-					s.startedAt <= endOfDay,
+					s.startedAt >= startMs &&
+					s.startedAt <= endMs,
 			)
 			.sort((a, b) => a.startedAt - b.startedAt);
 	},
@@ -599,11 +612,32 @@ Rules:
 // ─── Internal queries for generateJournal ───
 
 export const getSessionsForDate = internalQuery({
-	args: { userId: v.string(), date: v.string() },
+	args: { userId: v.string(), date: v.string(), timezone: v.optional(v.string()) },
 	handler: async (ctx, args) => {
+		// Use timezone-aware day boundaries (default: America/Chicago for Josh)
+		const tz = args.timezone ?? "America/Chicago";
 		const [year, month, day] = args.date.split("-").map(Number);
-		const startOfDay = new Date(year, month - 1, day, 0, 0, 0).getTime();
-		const endOfDay = new Date(year, month - 1, day, 23, 59, 59).getTime();
+
+		// Create start/end of day in user's timezone
+		// Construct ISO string with timezone offset
+		const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+		const startOfDay = new Date(`${dateStr}T00:00:00`);
+		const endOfDay = new Date(`${dateStr}T23:59:59.999`);
+
+		// Convert to UTC by accounting for timezone offset
+		// Use a simple offset approach for US timezones
+		const tzOffsets: Record<string, number> = {
+			"America/New_York": -5, "America/Chicago": -6,
+			"America/Denver": -7, "America/Los_Angeles": -8,
+			"US/Eastern": -5, "US/Central": -6, "US/Mountain": -7, "US/Pacific": -8,
+		};
+		// During DST (roughly Mar-Nov), offset is 1 hour less negative
+		const isDST = month >= 3 && month <= 11; // rough DST check
+		const baseOffset = tzOffsets[tz] ?? -6; // default CT
+		const offset = isDST ? baseOffset + 1 : baseOffset;
+
+		const startMs = startOfDay.getTime() - (offset * 60 * 60 * 1000);
+		const endMs = endOfDay.getTime() - (offset * 60 * 60 * 1000);
 
 		const sessions = await ctx.db
 			.query("capture_sessions")
@@ -613,8 +647,8 @@ export const getSessionsForDate = internalQuery({
 		return sessions.filter(
 			(s) =>
 				s.status === "stopped" &&
-				s.startedAt >= startOfDay &&
-				s.startedAt <= endOfDay,
+				s.startedAt >= startMs &&
+				s.startedAt <= endMs,
 		);
 	},
 });
@@ -632,20 +666,33 @@ export const getSegmentsForSession = internalQuery({
 
 // Get calendar events for a specific date (for journal context)
 export const getCalendarEventsForDate = internalQuery({
-	args: { userId: v.string(), date: v.string() },
+	args: { userId: v.string(), date: v.string(), timezone: v.optional(v.string()) },
 	handler: async (ctx, args) => {
+		const tz = args.timezone ?? "America/Chicago";
 		const [year, month, day] = args.date.split("-").map(Number);
-		const startOfDay = new Date(year, month - 1, day, 0, 0, 0).getTime();
-		const endOfDay = new Date(year, month - 1, day, 23, 59, 59, 999).getTime();
+		const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+		const startOfDay = new Date(`${dateStr}T00:00:00`);
+		const endOfDay = new Date(`${dateStr}T23:59:59.999`);
+
+		const tzOffsets: Record<string, number> = {
+			"America/New_York": -5, "America/Chicago": -6,
+			"America/Denver": -7, "America/Los_Angeles": -8,
+		};
+		const isDST = month >= 3 && month <= 11;
+		const baseOffset = tzOffsets[tz] ?? -6;
+		const offset = isDST ? baseOffset + 1 : baseOffset;
+
+		const startMs = startOfDay.getTime() - (offset * 60 * 60 * 1000);
+		const endMs = endOfDay.getTime() - (offset * 60 * 60 * 1000);
 
 		const events = await ctx.db
 			.query("calendar_events")
 			.withIndex("by_user_and_time", (q) =>
-				q.eq("userId", args.userId).gte("startTime", startOfDay),
+				q.eq("userId", args.userId).gte("startTime", startMs),
 			)
 			.collect();
 
-		return events.filter((e) => e.startTime <= endOfDay);
+		return events.filter((e) => e.startTime <= endMs);
 	},
 });
 
