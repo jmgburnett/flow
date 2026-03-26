@@ -13,7 +13,7 @@ import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 
-const ASSEMBLYAI_WS_URL = "wss://api.assemblyai.com/v2/realtime/ws";
+const ASSEMBLYAI_WS_URL = "wss://streaming.assemblyai.com/v3/ws";
 const SAMPLE_RATE = 16000;
 // Send audio every 250ms
 const SEND_INTERVAL_MS = 250;
@@ -139,46 +139,71 @@ export function CaptureProvider({ children }: { children: ReactNode }) {
 		}
 		const { token } = await res.json();
 
-		const wsUrl = `${ASSEMBLYAI_WS_URL}?sample_rate=${SAMPLE_RATE}&token=${token}`;
+		const wsUrl = `${ASSEMBLYAI_WS_URL}?sample_rate=${SAMPLE_RATE}&speech_model=nano&token=${token}`;
 		const ws = new WebSocket(wsUrl);
 		wsRef.current = ws;
 
 		ws.onopen = () => {
-			console.log("[Capture] WebSocket connected to AssemblyAI");
+			console.log("[Capture] WebSocket connected to AssemblyAI v3 Streaming");
 		};
 
 		ws.onmessage = async (event: MessageEvent) => {
-			let msg: {
-				message_type: string;
-				text?: string;
-				words?: PartialTranscriptWord[];
-				audio_start?: number;
-				audio_end?: number;
-				speaker?: string;
-				created?: string;
-			};
+			let msg: Record<string, unknown>;
 			try {
 				msg = JSON.parse(event.data as string);
 			} catch {
 				return;
 			}
 
-			if (msg.message_type === "PartialTranscript") {
-				setPartialTranscript(msg.text ?? "");
-			} else if (msg.message_type === "FinalTranscript" && msg.text) {
+			const msgType = (msg.type ?? msg.message_type) as string;
+
+			// v3 Universal Streaming: "Turn" messages contain transcript
+			if (msgType === "Turn") {
+				const transcript = (msg.transcript ?? msg.text ?? "") as string;
+				const endOfTurn = msg.end_of_turn as boolean | undefined;
+				
+				if (endOfTurn && transcript.trim()) {
+					// Final turn — store as segment
+					setPartialTranscript("");
+					if (sessionIdRef.current) {
+						await storeSegment({
+							sessionId: sessionIdRef.current,
+							text: transcript,
+							speaker: (msg.speaker as string) ?? undefined,
+							startMs: (msg.start as number) ?? 0,
+							endMs: (msg.end as number) ?? 0,
+							isFinal: true,
+							timestamp: Date.now(),
+						});
+					}
+				} else if (transcript.trim()) {
+					// Partial turn — show as partial
+					setPartialTranscript(transcript);
+				}
+			} else if (msgType === "Begin") {
+				console.log("[Capture] AssemblyAI v3 session started", msg);
+			} else if (msgType === "SpeechStarted") {
+				// Speech detected
+			} else if (msgType === "Termination") {
+				console.log("[Capture] AssemblyAI session terminated");
+			}
+			// Also handle legacy v2 message types as fallback
+			else if (msgType === "PartialTranscript") {
+				setPartialTranscript((msg.text as string) ?? "");
+			} else if (msgType === "FinalTranscript" && msg.text) {
 				setPartialTranscript("");
-				if (sessionIdRef.current && msg.text.trim()) {
+				if (sessionIdRef.current && (msg.text as string).trim()) {
 					await storeSegment({
 						sessionId: sessionIdRef.current,
-						text: msg.text,
-						speaker: msg.speaker,
-						startMs: msg.audio_start ?? 0,
-						endMs: msg.audio_end ?? 0,
+						text: msg.text as string,
+						speaker: msg.speaker as string,
+						startMs: (msg.audio_start as number) ?? 0,
+						endMs: (msg.audio_end as number) ?? 0,
 						isFinal: true,
 						timestamp: Date.now(),
 					});
 				}
-			} else if (msg.message_type === "SessionBegins") {
+			} else if (msgType === "SessionBegins") {
 				console.log("[Capture] AssemblyAI session started");
 			}
 		};
@@ -312,7 +337,7 @@ export function CaptureProvider({ children }: { children: ReactNode }) {
 		// Close WebSocket (sends terminate message)
 		if (wsRef.current) {
 			if (wsRef.current.readyState === WebSocket.OPEN) {
-				wsRef.current.send(JSON.stringify({ terminate_session: true }));
+				wsRef.current.send(JSON.stringify({ type: "Terminate" }));
 			}
 			wsRef.current.close();
 			wsRef.current = null;
