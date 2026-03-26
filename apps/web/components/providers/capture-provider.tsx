@@ -35,6 +35,11 @@ export interface LiveTranscriptMessage {
   created: string;
 }
 
+interface MeetingContext {
+  meetingTitle: string | null;
+  attendees: string[];
+}
+
 interface CaptureState {
   isRecording: boolean;
   isPaused: boolean;
@@ -42,6 +47,7 @@ interface CaptureState {
   sessionId: Id<"capture_sessions"> | null;
   error: string | null;
   partialTranscript: string;
+  currentMeeting: MeetingContext | null;
   start: () => Promise<void>;
   pause: () => Promise<void>;
   resume: () => Promise<void>;
@@ -55,6 +61,7 @@ const CaptureContext = createContext<CaptureState>({
   sessionId: null,
   error: null,
   partialTranscript: "",
+  currentMeeting: null,
   start: async () => {},
   pause: async () => {},
   resume: async () => {},
@@ -127,11 +134,15 @@ export function CaptureProvider({ children }: { children: ReactNode }) {
   const pausedElapsedRef = useRef(0);
   const workletUrlRef = useRef<string | null>(null);
 
+  const [currentMeeting, setCurrentMeeting] = useState<MeetingContext | null>(null);
+  const meetingPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const startSession = useMutation(api.capture.startSession);
   const pauseSessionMut = useMutation(api.capture.pauseSession);
   const resumeSessionMut = useMutation(api.capture.resumeSession);
   const stopSessionMut = useMutation(api.capture.stopSession);
   const storeSegment = useMutation(api.capture.storeTranscriptSegment);
+  const detectMeeting = useMutation(api.capture.detectMeetingChange);
 
   const connectWebSocket = useCallback(
     async (sid: Id<"capture_sessions">) => {
@@ -243,6 +254,32 @@ export function CaptureProvider({ children }: { children: ReactNode }) {
       const sid = await startSession({ userId: "josh" });
       sessionIdRef.current = sid;
       setSessionId(sid);
+
+      // Check for initial meeting context and start polling for meeting changes
+      try {
+        const meetingResult = await detectMeeting({ sessionId: sid });
+        if (meetingResult?.meetingTitle) {
+          setCurrentMeeting({
+            meetingTitle: meetingResult.meetingTitle,
+            attendees: meetingResult.attendees ?? [],
+          });
+        }
+      } catch { /* ignore if no meeting */ }
+
+      // Poll for meeting changes every 60 seconds
+      meetingPollRef.current = setInterval(async () => {
+        if (!sessionIdRef.current) return;
+        try {
+          const result = await detectMeeting({ sessionId: sessionIdRef.current });
+          if (result?.changed) {
+            setCurrentMeeting(
+              result.meetingTitle
+                ? { meetingTitle: result.meetingTitle, attendees: result.attendees ?? [] }
+                : null,
+            );
+          }
+        } catch { /* ignore */ }
+      }, 60_000);
 
       // Connect WebSocket first
       await connectWebSocket(sid);
@@ -365,6 +402,11 @@ export function CaptureProvider({ children }: { children: ReactNode }) {
       timerRef.current = null;
     }
 
+    if (meetingPollRef.current) {
+      clearInterval(meetingPollRef.current);
+      meetingPollRef.current = null;
+    }
+
     if (sessionIdRef.current) {
       await stopSessionMut({ sessionId: sessionIdRef.current });
       sessionIdRef.current = null;
@@ -375,6 +417,7 @@ export function CaptureProvider({ children }: { children: ReactNode }) {
     setElapsed(0);
     setSessionId(null);
     setPartialTranscript("");
+    setCurrentMeeting(null);
   }, [stopSessionMut]);
 
   // Cleanup on unmount
@@ -403,6 +446,7 @@ export function CaptureProvider({ children }: { children: ReactNode }) {
         sessionId,
         error,
         partialTranscript,
+        currentMeeting,
         start,
         pause,
         resume,

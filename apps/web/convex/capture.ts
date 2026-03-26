@@ -47,13 +47,103 @@ export const startSession = mutation({
       });
     }
 
+    const now = Date.now();
+
+    // Auto-detect current calendar meeting
+    const calendarEvents = await ctx.db
+      .query("calendar_events")
+      .withIndex("by_user_and_time", (q) =>
+        q.eq("userId", args.userId).lte("startTime", now),
+      )
+      .order("desc")
+      .take(10);
+
+    // Find event that's currently happening (started before now, ends after now)
+    const currentMeeting = calendarEvents.find(
+      (e) => e.startTime <= now && e.endTime >= now,
+    );
+
     return await ctx.db.insert("capture_sessions", {
       userId: args.userId,
       status: "recording",
-      startedAt: Date.now(),
+      startedAt: now,
       totalDurationMs: 0,
       chunkCount: 0,
+      ...(currentMeeting && {
+        calendarEventId: currentMeeting._id,
+        meetingTitle: currentMeeting.title,
+        meetingAttendees: currentMeeting.attendees ?? [],
+      }),
     });
+  },
+});
+
+// Check for meeting transitions during recording (call periodically from client)
+export const detectMeetingChange = mutation({
+  args: { sessionId: v.id("capture_sessions") },
+  handler: async (ctx, args) => {
+    const session = await ctx.db.get(args.sessionId);
+    if (!session || session.status !== "recording") return null;
+
+    const now = Date.now();
+    const calendarEvents = await ctx.db
+      .query("calendar_events")
+      .withIndex("by_user_and_time", (q) =>
+        q.eq("userId", session.userId).lte("startTime", now),
+      )
+      .order("desc")
+      .take(10);
+
+    const currentMeeting = calendarEvents.find(
+      (e) => e.startTime <= now && e.endTime >= now,
+    );
+
+    const currentEventId = currentMeeting?._id ?? null;
+    const previousEventId = session.calendarEventId ?? null;
+
+    // Meeting changed — update session
+    if (currentEventId !== previousEventId) {
+      await ctx.db.patch(args.sessionId, {
+        calendarEventId: currentMeeting?._id,
+        meetingTitle: currentMeeting?.title,
+        meetingAttendees: currentMeeting?.attendees ?? [],
+      });
+      return {
+        changed: true,
+        meetingTitle: currentMeeting?.title ?? null,
+        attendees: currentMeeting?.attendees ?? [],
+      };
+    }
+
+    return { changed: false, meetingTitle: session.meetingTitle ?? null, attendees: session.meetingAttendees ?? [] };
+  },
+});
+
+// Get current meeting context for a session
+export const getSessionMeetingContext = query({
+  args: { sessionId: v.id("capture_sessions") },
+  handler: async (ctx, args) => {
+    const session = await ctx.db.get(args.sessionId);
+    if (!session) return null;
+
+    let calendarEvent = null;
+    if (session.calendarEventId) {
+      calendarEvent = await ctx.db.get(session.calendarEventId);
+    }
+
+    return {
+      meetingTitle: session.meetingTitle ?? null,
+      attendees: session.meetingAttendees ?? [],
+      calendarEvent: calendarEvent
+        ? {
+            title: calendarEvent.title,
+            description: calendarEvent.description,
+            startTime: calendarEvent.startTime,
+            endTime: calendarEvent.endTime,
+            attendees: calendarEvent.attendees ?? [],
+          }
+        : null,
+    };
   },
 });
 

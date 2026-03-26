@@ -530,6 +530,10 @@ export default defineSchema({
     currentContext: v.optional(v.string()),
     // Journal inclusion toggle (default: included)
     includeInJournal: v.optional(v.boolean()),
+    // Calendar meeting context (auto-detected)
+    calendarEventId: v.optional(v.id("calendar_events")),
+    meetingTitle: v.optional(v.string()),
+    meetingAttendees: v.optional(v.array(v.string())),
   })
     .index("by_user", ["userId"])
     .index("by_user_and_status", ["userId", "status"]),

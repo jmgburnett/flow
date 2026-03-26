@@ -324,7 +324,7 @@ export const generateJournal = action({
 			return;
 		}
 
-		// Collect all transcript segments for those sessions
+		// Collect all transcript segments + calendar context for those sessions
 		const allSegments: Array<{
 			text: string;
 			startMs: number;
@@ -332,6 +332,14 @@ export const generateJournal = action({
 			isFinal: boolean;
 		}> = [];
 		let totalDurationMs = 0;
+
+		// Build calendar context from sessions
+		const meetingContexts: Array<{
+			sessionTitle: string;
+			meetingTitle: string | undefined;
+			attendees: string[];
+			startedAt: number;
+		}> = [];
 
 		for (const session of includedSessions) {
 			const segments = await ctx.runQuery(
@@ -342,7 +350,23 @@ export const generateJournal = action({
 			);
 			allSegments.push(...segments);
 			totalDurationMs += session.totalDurationMs ?? 0;
+
+			// Gather meeting context if available
+			if (session.meetingTitle || session.meetingAttendees?.length) {
+				meetingContexts.push({
+					sessionTitle: session.title ?? "Untitled",
+					meetingTitle: session.meetingTitle,
+					attendees: session.meetingAttendees ?? [],
+					startedAt: session.startedAt,
+				});
+			}
 		}
+
+		// Also fetch calendar events for this day to fill gaps
+		const calendarEvents = await ctx.runQuery(
+			internal.journal.getCalendarEventsForDate,
+			{ userId: args.userId, date: args.date },
+		);
 
 		// Build transcript text with approximate timestamps
 		const transcriptText = allSegments
@@ -380,10 +404,34 @@ export const generateJournal = action({
 			day: "numeric",
 		});
 
-		const prompt = `You are generating Josh Burnett's personal "Field Notes" daily journal. Josh is Head of AI Product at Gloo. Today is ${dateFormatted}. The transcripts below are from ${captureMinutes} minutes of recorded audio across ${conversationCount} session(s).
+		// Build calendar context block for the prompt
+		let calendarBlock = "";
+		if (meetingContexts.length > 0 || (calendarEvents && calendarEvents.length > 0)) {
+			calendarBlock = "\n\nCALENDAR CONTEXT FOR TODAY:\n";
 
+			// From recording sessions with detected meetings
+			for (const mc of meetingContexts) {
+				const time = new Date(mc.startedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+				calendarBlock += `- [${time}] "${mc.meetingTitle ?? mc.sessionTitle}" — Attendees: ${mc.attendees.length > 0 ? mc.attendees.join(", ") : "unknown"}\n`;
+			}
+
+			// From calendar events (even if no recording matched)
+			if (calendarEvents) {
+				for (const evt of calendarEvents) {
+					const time = new Date(evt.startTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+					const endTime = new Date(evt.endTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+					const attendeeList = evt.attendees?.join(", ") ?? "no attendees listed";
+					calendarBlock += `- [${time}-${endTime}] "${evt.title}" — Attendees: ${attendeeList}\n`;
+				}
+			}
+
+			calendarBlock += "\nIMPORTANT: Use the calendar attendee names above to identify WHO said what in transcripts and assign action items to specific people by name. If transcript mentions a topic that matches a calendar meeting, associate it with that meeting and its attendees.\n";
+		}
+
+		const prompt = `You are generating Josh Burnett's personal "Field Notes" daily journal. Josh is Head of AI Product at Gloo. Today is ${dateFormatted}. The transcripts below are from ${captureMinutes} minutes of recorded audio across ${conversationCount} session(s).
+${calendarBlock}
 TRANSCRIPT:
-${transcriptText.slice(0, 20000)}
+${transcriptText.slice(0, 18000)}
 
 Generate a rich, structured Field Notes journal. Be specific — reference actual names, decisions, topics from the transcript. Identify distinct meetings/conversations even if they flow together. Write meeting summaries as narrative first-person prose (2-4 paragraphs).
 
@@ -579,6 +627,25 @@ export const getSegmentsForSession = internalQuery({
 			.withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
 			.order("asc")
 			.collect();
+	},
+});
+
+// Get calendar events for a specific date (for journal context)
+export const getCalendarEventsForDate = internalQuery({
+	args: { userId: v.string(), date: v.string() },
+	handler: async (ctx, args) => {
+		const [year, month, day] = args.date.split("-").map(Number);
+		const startOfDay = new Date(year, month - 1, day, 0, 0, 0).getTime();
+		const endOfDay = new Date(year, month - 1, day, 23, 59, 59, 999).getTime();
+
+		const events = await ctx.db
+			.query("calendar_events")
+			.withIndex("by_user_and_time", (q) =>
+				q.eq("userId", args.userId).gte("startTime", startOfDay),
+			)
+			.collect();
+
+		return events.filter((e) => e.startTime <= endOfDay);
 	},
 });
 

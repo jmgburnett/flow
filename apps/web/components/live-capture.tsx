@@ -28,6 +28,7 @@ export function LiveCaptureBar() {
     elapsed,
     sessionId,
     error,
+    currentMeeting,
     start,
     pause,
     resume,
@@ -80,12 +81,25 @@ export function LiveCaptureBar() {
           {formatDuration(elapsed)}
         </span>
 
-        <span className="text-xs text-muted-foreground">
-          {isPaused ? "Paused" : "Recording"}
-          {finalCount > 0 && (
-            <span className="ml-1.5 text-primary">· {finalCount} segments</span>
+        <div className="flex flex-col">
+          <span className="text-xs text-muted-foreground">
+            {isPaused ? "Paused" : "Recording"}
+            {finalCount > 0 && (
+              <span className="ml-1.5 text-primary">· {finalCount} segments</span>
+            )}
+          </span>
+          {currentMeeting?.meetingTitle && (
+            <span className="text-[10px] text-primary/80 font-medium truncate max-w-[180px]">
+              📅 {currentMeeting.meetingTitle}
+              {currentMeeting.attendees.length > 0 && (
+                <span className="text-muted-foreground font-normal">
+                  {" "}· {currentMeeting.attendees.slice(0, 3).join(", ")}
+                  {currentMeeting.attendees.length > 3 && ` +${currentMeeting.attendees.length - 3}`}
+                </span>
+              )}
+            </span>
           )}
-        </span>
+        </div>
 
         <div className="flex-1" />
 
