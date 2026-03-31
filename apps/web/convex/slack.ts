@@ -8,6 +8,7 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { getAuthenticatedUserId } from "./lib/auth";
+import { encrypt, decrypt, isEncryptionConfigured } from "./lib/crypto";
 
 // ─── Connections ───
 
@@ -24,6 +25,14 @@ export const storeSlackConnection = mutation({
   handler: async (ctx, args) => {
     const userId = await getAuthenticatedUserId(ctx);
 
+    const useEncryption = isEncryptionConfigured();
+    const botToken = useEncryption
+      ? await encrypt(args.botToken)
+      : args.botToken;
+    const userToken = useEncryption
+      ? await encrypt(args.userToken)
+      : args.userToken;
+
     const existing = await ctx.db
       .query("slack_connections")
       .withIndex("by_team", (q) => q.eq("teamId", args.teamId))
@@ -31,19 +40,23 @@ export const storeSlackConnection = mutation({
 
     if (existing) {
       await ctx.db.patch(existing._id, {
-        botToken: args.botToken,
-        userToken: args.userToken,
+        botToken,
+        userToken,
         scopes: args.scopes,
         slackUserId: args.slackUserId,
         slackUserName: args.slackUserName,
+        tokensEncrypted: useEncryption,
       });
       return existing._id;
     }
 
     return await ctx.db.insert("slack_connections", {
       ...args,
+      botToken,
+      userToken,
       userId,
       connectedAt: Date.now(),
+      tokensEncrypted: useEncryption,
     });
   },
 });
@@ -201,7 +214,9 @@ export const syncSlackMessages = action({
     });
     if (!connection) throw new Error("Slack connection not found");
 
-    const token = connection.userToken;
+    const token = connection.tokensEncrypted
+      ? await decrypt(connection.userToken)
+      : connection.userToken;
     const mySlackId = connection.slackUserId;
     let newMessages = 0;
 
@@ -361,6 +376,10 @@ export const sendMessage = action({
     });
     if (!connection) throw new Error("Connection not found");
 
+    const userToken = connection.tokensEncrypted
+      ? await decrypt(connection.userToken)
+      : connection.userToken;
+
     const body: Record<string, string> = {
       channel: args.channelId,
       text: args.text,
@@ -370,7 +389,7 @@ export const sendMessage = action({
     const resp = await fetch("https://slack.com/api/chat.postMessage", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${connection.userToken}`,
+        Authorization: `Bearer ${userToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),

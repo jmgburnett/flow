@@ -15,6 +15,7 @@ export default defineSchema({
     scopes: v.array(v.string()),
     connectedAt: v.number(),
     lastSyncAt: v.optional(v.number()),
+    tokensEncrypted: v.optional(v.boolean()),
   })
     .index("by_user", ["userId"])
     .index("by_email", ["email"]),
@@ -290,6 +291,7 @@ export default defineSchema({
     scopes: v.array(v.string()),
     connectedAt: v.number(),
     lastSyncAt: v.optional(v.number()),
+    tokensEncrypted: v.optional(v.boolean()),
   })
     .index("by_user", ["userId"])
     .index("by_team", ["teamId"]),

@@ -9,6 +9,7 @@ import {
 } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { getAuthenticatedUserId } from "./lib/auth";
+import { encrypt, decrypt, isEncryptionConfigured } from "./lib/crypto";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
@@ -25,6 +26,15 @@ export const storeGoogleConnection = mutation({
   handler: async (ctx, args) => {
     const userId = await getAuthenticatedUserId(ctx);
 
+    // Encrypt tokens before storage
+    const useEncryption = isEncryptionConfigured();
+    const accessToken = useEncryption
+      ? await encrypt(args.accessToken)
+      : args.accessToken;
+    const refreshToken = useEncryption
+      ? await encrypt(args.refreshToken)
+      : args.refreshToken;
+
     // Check if connection already exists
     const existing = await ctx.db
       .query("google_connections")
@@ -32,25 +42,25 @@ export const storeGoogleConnection = mutation({
       .first();
 
     if (existing) {
-      // Update existing connection
       await ctx.db.patch(existing._id, {
-        accessToken: args.accessToken,
-        refreshToken: args.refreshToken,
+        accessToken,
+        refreshToken,
         tokenExpiry: args.tokenExpiry,
         scopes: args.scopes,
+        tokensEncrypted: useEncryption,
       });
       return existing._id;
     }
 
-    // Create new connection
     const connectionId = await ctx.db.insert("google_connections", {
       userId,
       email: args.email,
-      accessToken: args.accessToken,
-      refreshToken: args.refreshToken,
+      accessToken,
+      refreshToken,
       tokenExpiry: args.tokenExpiry,
       scopes: args.scopes,
       connectedAt: Date.now(),
+      tokensEncrypted: useEncryption,
     });
 
     return connectionId;
@@ -97,9 +107,14 @@ export const updateConnectionTokens = internalMutation({
     tokenExpiry: v.number(),
   },
   handler: async (ctx, args) => {
+    const useEncryption = isEncryptionConfigured();
+    const accessToken = useEncryption
+      ? await encrypt(args.accessToken)
+      : args.accessToken;
     await ctx.db.patch(args.connectionId, {
-      accessToken: args.accessToken,
+      accessToken,
       tokenExpiry: args.tokenExpiry,
+      tokensEncrypted: useEncryption,
     });
   },
 });
@@ -117,11 +132,18 @@ async function refreshTokenIfNeeded(
     throw new Error("Connection not found");
   }
 
+  // Decrypt tokens if encrypted
+  const accessToken = connection.tokensEncrypted
+    ? await decrypt(connection.accessToken)
+    : connection.accessToken;
+  const refreshToken = connection.tokensEncrypted
+    ? await decrypt(connection.refreshToken)
+    : connection.refreshToken;
+
   // Check if token is expired or about to expire (within 5 minutes)
   const now = Date.now();
   if (connection.tokenExpiry > now + 5 * 60 * 1000) {
-    // Token still valid
-    return connection.accessToken;
+    return accessToken;
   }
 
   // Refresh token
@@ -133,7 +155,7 @@ async function refreshTokenIfNeeded(
     body: new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID!,
       client_secret: GOOGLE_CLIENT_SECRET!,
-      refresh_token: connection.refreshToken,
+      refresh_token: refreshToken,
       grant_type: "refresh_token",
     }),
   });
