@@ -9,6 +9,7 @@ import {
 import { internal } from "./_generated/api";
 import { getAuthenticatedUserId } from "./lib/auth";
 import { encrypt, decrypt, isEncryptionConfigured } from "./lib/crypto";
+import { auditLog } from "./lib/audit";
 
 // ─── Connections ───
 
@@ -47,10 +48,17 @@ export const storeSlackConnection = mutation({
         slackUserName: args.slackUserName,
         tokensEncrypted: useEncryption,
       });
+      await auditLog(ctx, {
+        userId,
+        action: "slack.reconnect",
+        resource: "slack_connections",
+        resourceId: existing._id,
+        metadata: { teamName: args.teamName },
+      });
       return existing._id;
     }
 
-    return await ctx.db.insert("slack_connections", {
+    const connectionId = await ctx.db.insert("slack_connections", {
       ...args,
       botToken,
       userToken,
@@ -58,6 +66,16 @@ export const storeSlackConnection = mutation({
       connectedAt: Date.now(),
       tokensEncrypted: useEncryption,
     });
+
+    await auditLog(ctx, {
+      userId,
+      action: "slack.connect",
+      resource: "slack_connections",
+      resourceId: connectionId,
+      metadata: { teamName: args.teamName },
+    });
+
+    return connectionId;
   },
 });
 
@@ -84,7 +102,16 @@ export const getSlackConnections = query({
 export const deleteSlackConnection = mutation({
   args: { connectionId: v.id("slack_connections") },
   handler: async (ctx, args) => {
+    const userId = await getAuthenticatedUserId(ctx);
+    const conn = await ctx.db.get(args.connectionId);
     await ctx.db.delete(args.connectionId);
+    await auditLog(ctx, {
+      userId,
+      action: "slack.disconnect",
+      resource: "slack_connections",
+      resourceId: args.connectionId,
+      metadata: { teamName: conn?.teamName },
+    });
   },
 });
 

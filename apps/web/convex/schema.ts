@@ -724,4 +724,18 @@ export default defineSchema({
     updatedAt: v.number(),
     segmentCount: v.number(),
   }).index("by_session", ["sessionId"]),
+
+  // ─── Audit logs ───
+  audit_logs: defineTable({
+    userId: v.string(),
+    action: v.string(),
+    resource: v.string(),
+    resourceId: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+    timestamp: v.number(),
+    ip: v.optional(v.string()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_action", ["action"])
+    .index("by_timestamp", ["timestamp"]),
 });

@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { action, mutation, query } from "./_generated/server";
 import { api } from "./_generated/api";
 import { getAuthenticatedUserId } from "./lib/auth";
+import { auditLog } from "./lib/audit";
 
 // ─── Conversations ───
 
@@ -95,6 +96,17 @@ export const sendMessage = mutation({
     // Update conversation timestamp
     if (args.conversationId) {
       await ctx.db.patch(args.conversationId, { updatedAt: Date.now() });
+    }
+
+    // Audit agent interactions
+    if (args.role === "user") {
+      await auditLog(ctx, {
+        userId,
+        action: "chat.message",
+        resource: "chat_messages",
+        resourceId: msgId,
+        metadata: { conversationId: args.conversationId },
+      });
     }
 
     return msgId;

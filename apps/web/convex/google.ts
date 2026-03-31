@@ -10,6 +10,7 @@ import {
 import { api, internal } from "./_generated/api";
 import { getAuthenticatedUserId } from "./lib/auth";
 import { encrypt, decrypt, isEncryptionConfigured } from "./lib/crypto";
+import { auditLog } from "./lib/audit";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
@@ -49,6 +50,13 @@ export const storeGoogleConnection = mutation({
         scopes: args.scopes,
         tokensEncrypted: useEncryption,
       });
+      await auditLog(ctx, {
+        userId,
+        action: "google.reconnect",
+        resource: "google_connections",
+        resourceId: existing._id,
+        metadata: { email: args.email },
+      });
       return existing._id;
     }
 
@@ -61,6 +69,14 @@ export const storeGoogleConnection = mutation({
       scopes: args.scopes,
       connectedAt: Date.now(),
       tokensEncrypted: useEncryption,
+    });
+
+    await auditLog(ctx, {
+      userId,
+      action: "google.connect",
+      resource: "google_connections",
+      resourceId: connectionId,
+      metadata: { email: args.email },
     });
 
     return connectionId;
@@ -193,7 +209,16 @@ export const deleteGoogleConnection = mutation({
     connectionId: v.id("google_connections"),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthenticatedUserId(ctx);
+    const conn = await ctx.db.get(args.connectionId);
     await ctx.db.delete(args.connectionId);
+    await auditLog(ctx, {
+      userId,
+      action: "google.disconnect",
+      resource: "google_connections",
+      resourceId: args.connectionId,
+      metadata: { email: conn?.email },
+    });
   },
 });
 
