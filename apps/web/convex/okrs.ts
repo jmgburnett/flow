@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { getAuthenticatedUserId } from "./lib/auth";
 
 const statusValidator = v.union(
   v.literal("active"),
@@ -23,21 +24,21 @@ const krStatusValidator = v.union(
 
 export const listObjectives = query({
   args: {
-    userId: v.string(),
     status: v.optional(statusValidator),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthenticatedUserId(ctx);
     if (args.status) {
       return await ctx.db
         .query("objectives")
         .withIndex("by_user_and_status", (q) =>
-          q.eq("userId", args.userId).eq("status", args.status!),
+          q.eq("userId", userId).eq("status", args.status!),
         )
         .collect();
     }
     return await ctx.db
       .query("objectives")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
   },
 });
@@ -49,16 +50,17 @@ export const getObjective = query({
 
 export const createObjective = mutation({
   args: {
-    userId: v.string(),
     title: v.string(),
     description: v.optional(v.string()),
     startDate: v.number(),
     endDate: v.number(),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthenticatedUserId(ctx);
     const now = Date.now();
     return await ctx.db.insert("objectives", {
       ...args,
+      userId,
       status: "active",
       ragStatus: "not_started",
       createdAt: now,
@@ -117,7 +119,6 @@ export const listKeyResults = query({
 export const createKeyResult = mutation({
   args: {
     objectiveId: v.id("objectives"),
-    userId: v.string(),
     title: v.string(),
     targetValue: v.number(),
     unit: v.optional(v.string()),
@@ -126,8 +127,10 @@ export const createKeyResult = mutation({
     deadline: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthenticatedUserId(ctx);
     return await ctx.db.insert("key_results", {
       ...args,
+      userId,
       currentValue: 0,
       status: "on_track",
       updatedAt: Date.now(),
@@ -167,11 +170,12 @@ export const deleteKeyResult = mutation({
 // ─── Dashboard aggregate ───
 
 export const getOKRDashboard = query({
-  args: { userId: v.string() },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthenticatedUserId(ctx);
     const objectives = await ctx.db
       .query("objectives")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
     const activeObjectives = objectives.filter((o) => o.status === "active");

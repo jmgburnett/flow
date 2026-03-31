@@ -36,12 +36,8 @@ export default function SettingsPage() {
   const [emailCount, setEmailCount] = useState("200");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  const googleConnections = useQuery(api.google.getGoogleConnections, {
-    userId: "josh",
-  });
-  const slackConnections = useQuery(api.slack.getSlackConnections, {
-    userId: "josh",
-  });
+  const googleConnections = useQuery(api.google.getGoogleConnections, {});
+  const slackConnections = useQuery(api.slack.getSlackConnections, {});
 
   const syncGmail = useAction(api.google.syncGmailInbox);
   const syncCalendar = useAction(api.google.syncCalendar);
@@ -50,9 +46,7 @@ export default function SettingsPage() {
   const syncSlack = useAction(api.slack.syncSlackMessages);
   const deleteSlackConnection = useMutation(api.slack.deleteSlackConnection);
 
-  const userPreferences = useQuery(api.journal.getUserPreferences, {
-    userId: "josh",
-  });
+  const userPreferences = useQuery(api.journal.getUserPreferences, {});
   const scheduleJournalGeneration = useMutation(
     api.journal.scheduleJournalGeneration,
   );
@@ -71,12 +65,8 @@ export default function SettingsPage() {
     setPrefsSynced(true);
   }
 
-  const styleProfile = useQuery(api.styleAnalysis.getStyleProfile, {
-    userId: "josh",
-  });
-  const analysisStatus = useQuery(api.styleAnalysis.getAnalysisStatus, {
-    userId: "josh",
-  });
+  const styleProfile = useQuery(api.styleAnalysis.getStyleProfile, {});
+  const analysisStatus = useQuery(api.styleAnalysis.getAnalysisStatus, {});
   const analyzeStyle = useAction(api.styleAnalysis.analyzeEmailStyle);
 
   useEffect(() => {
@@ -368,7 +358,6 @@ export default function SettingsPage() {
                     setIsAnalyzing(true);
                     try {
                       await analyzeStyle({
-                        userId: "josh",
                         emailCount: parseInt(emailCount),
                       });
                     } catch (e) {
@@ -436,7 +425,6 @@ export default function SettingsPage() {
                           setIsAnalyzing(true);
                           try {
                             await analyzeStyle({
-                              userId: "josh",
                               emailCount: parseInt(emailCount),
                             });
                           } catch (e) {
@@ -531,7 +519,6 @@ export default function SettingsPage() {
                 setIsSavingJournal(true);
                 try {
                   await scheduleJournalGeneration({
-                    userId: "josh",
                     journalTime,
                     journalTimezone:
                       Intl.DateTimeFormat().resolvedOptions().timeZone,

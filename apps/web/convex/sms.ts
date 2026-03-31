@@ -1,16 +1,19 @@
 import { v } from "convex/values";
-import { action, mutation, query, internalMutation } from "./_generated/server";
+import { action, internalMutation, mutation, query } from "./_generated/server";
 import { internal, api } from "./_generated/api";
+import { getAuthenticatedUserId } from "./lib/auth";
 
 const TELNYX_FROM = "+16156408799";
 
 // List all SMS conversations for a user, sorted by most recent
 export const listConversations = query({
-  args: { userId: v.string() },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthenticatedUserId(ctx);
+
     return await ctx.db
       .query("sms_conversations")
-      .withIndex("by_user_and_last_message", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user_and_last_message", (q) => q.eq("userId", userId))
       .order("desc")
       .collect();
   },
@@ -19,13 +22,14 @@ export const listConversations = query({
 // Get all messages for a specific conversation (phone number)
 export const getMessages = query({
   args: {
-    userId: v.string(),
     phoneNumber: v.string(),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthenticatedUserId(ctx);
+
     const messages = await ctx.db
       .query("sms_messages")
-      .withIndex("by_user_and_timestamp", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user_and_timestamp", (q) => q.eq("userId", userId))
       .filter((q) =>
         q.or(
           q.eq(q.field("from"), args.phoneNumber),
@@ -40,11 +44,13 @@ export const getMessages = query({
 
 // Get unread count across all conversations
 export const unreadCount = query({
-  args: { userId: v.string() },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthenticatedUserId(ctx);
+
     const convos = await ctx.db
       .query("sms_conversations")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
     return convos.reduce((sum, c) => sum + c.unreadCount, 0);
   },
@@ -53,7 +59,6 @@ export const unreadCount = query({
 // Send SMS via Telnyx API + store in Convex
 export const sendSMS = action({
   args: {
-    userId: v.string(),
     to: v.string(),
     body: v.string(),
     contactName: v.optional(v.string()),
@@ -62,6 +67,7 @@ export const sendSMS = action({
     ctx,
     args,
   ): Promise<{ success: boolean; messageId?: string }> => {
+    const userId = await getAuthenticatedUserId(ctx);
     const TELNYX_API_KEY = process.env.TELNYX_API_KEY;
     if (!TELNYX_API_KEY) throw new Error("TELNYX_API_KEY not configured");
 
@@ -88,7 +94,7 @@ export const sendSMS = action({
 
     // Store in Convex
     await ctx.runMutation(internal.sms.storeMessage, {
-      userId: args.userId,
+      userId,
       direction: "outbound",
       from: TELNYX_FROM,
       to: args.to,
@@ -154,8 +160,8 @@ export const storeMessage = internalMutation({
   },
 });
 
-// Public mutation for webhook to call (inbound SMS)
-export const receiveMessage = mutation({
+// Internal mutation for webhook to call (inbound SMS)
+export const receiveMessage = internalMutation({
   args: {
     userId: v.string(),
     from: v.string(),
@@ -221,19 +227,42 @@ export const receiveMessage = mutation({
   },
 });
 
+// Public action for inbound SMS webhook (no user auth context)
+export const receiveInboundSMS = action({
+	args: {
+		from: v.string(),
+		to: v.string(),
+		body: v.string(),
+		contactName: v.optional(v.string()),
+	},
+	handler: async (ctx, args) => {
+		// Webhook endpoint — no user auth available.
+		// Resolve userId from existing conversation or fall back to env default.
+		const defaultUserId = process.env.SMS_DEFAULT_USER_ID ?? "josh";
+		await ctx.runMutation(internal.sms.receiveMessage, {
+			userId: defaultUserId,
+			from: args.from,
+			to: args.to,
+			body: args.body,
+			contactName: args.contactName,
+		});
+	},
+});
+
 // Mark a conversation as read
 export const markRead = mutation({
   args: {
-    userId: v.string(),
     phoneNumber: v.string(),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthenticatedUserId(ctx);
+
     const conversation = await ctx.db
       .query("sms_conversations")
       .withIndex("by_phone_number", (q) =>
         q.eq("phoneNumber", args.phoneNumber),
       )
-      .filter((q) => q.eq(q.field("userId"), args.userId))
+      .filter((q) => q.eq(q.field("userId"), userId))
       .first();
 
     if (conversation) {
@@ -245,10 +274,7 @@ export const markRead = mutation({
       .query("sms_messages")
       .withIndex("by_from", (q) => q.eq("from", args.phoneNumber))
       .filter((q) =>
-        q.and(
-          q.eq(q.field("userId"), args.userId),
-          q.eq(q.field("read"), false),
-        ),
+        q.and(q.eq(q.field("userId"), userId), q.eq(q.field("read"), false)),
       )
       .collect();
 

@@ -25,15 +25,14 @@ import { useCapture } from "@/components/providers/capture-provider";
 import Link from "next/link";
 
 function QuickGlance() {
-  const emails = useQuery(api.google.getEmails, { userId: "josh" }) ?? [];
+  const emails = useQuery(api.google.getEmails, {}) ?? [];
   const calendarEvents =
     useQuery(api.google.getCalendarEvents, {
-      userId: "josh",
       startTime: Date.now(),
       endTime: Date.now() + 24 * 60 * 60 * 1000,
     }) ?? [];
   const smsConvos =
-    useQuery(api.sms.listConversations, { userId: "josh" }) ?? [];
+    useQuery(api.sms.listConversations, {}) ?? [];
 
   const needsMe = emails.filter((e: any) => e.triageStatus === "needs_me");
   const unreadTexts = smsConvos.reduce(
@@ -155,7 +154,6 @@ function TodaysJournalCard() {
   })();
 
   const journal = useQuery(api.journal.getJournal, {
-    userId: "josh",
     date: today,
   });
 
@@ -200,9 +198,7 @@ type RightPanelTab = "feed" | "transcript" | "glance";
 function RightSidebar() {
   const [activeTab, setActiveTab] = useState<RightPanelTab>("feed");
   const { isRecording, sessionId } = useCapture();
-  const activeSession = useQuery(api.capture.getActiveSession, {
-    userId: "josh",
-  });
+  const activeSession = useQuery(api.capture.getActiveSession, {});
   // Use context sessionId if recording, otherwise check DB for recent session
   const effectiveSessionId = sessionId ?? activeSession?._id;
 

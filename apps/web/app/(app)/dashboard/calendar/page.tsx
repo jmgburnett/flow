@@ -81,11 +81,10 @@ export default function CalendarPage() {
   const weekEnd = weekDates[6].getTime() + 24 * 60 * 60 * 1000;
 
   const connections =
-    useQuery(api.google.getGoogleConnections, { userId: "josh" }) ?? [];
+    useQuery(api.google.getGoogleConnections, {}) ?? [];
 
   const events =
     useQuery(api.google.getCalendarEvents, {
-      userId: "josh",
       startTime: weekStart,
       endTime: weekEnd,
     }) ?? [];

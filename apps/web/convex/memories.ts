@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { getAuthenticatedUserId } from "./lib/auth";
 
 const categoryValidator = v.union(
   v.literal("personal"),
@@ -12,22 +13,22 @@ const categoryValidator = v.union(
 // List memories for a user, optionally filtered by category
 export const list = query({
   args: {
-    userId: v.string(),
     category: v.optional(categoryValidator),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthenticatedUserId(ctx);
     let memories;
     if (args.category) {
       memories = await ctx.db
         .query("memories")
         .withIndex("by_user_and_category", (q) =>
-          q.eq("userId", args.userId).eq("category", args.category!),
+          q.eq("userId", userId).eq("category", args.category!),
         )
         .collect();
     } else {
       memories = await ctx.db
         .query("memories")
-        .withIndex("by_user", (q) => q.eq("userId", args.userId))
+        .withIndex("by_user", (q) => q.eq("userId", userId))
         .collect();
     }
 
@@ -50,7 +51,6 @@ export const get = query({
 // Create a new memory
 export const create = mutation({
   args: {
-    userId: v.string(),
     title: v.string(),
     content: v.string(),
     category: categoryValidator,
@@ -67,9 +67,10 @@ export const create = mutation({
     sourceId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthenticatedUserId(ctx);
     const now = Date.now();
     return await ctx.db.insert("memories", {
-      userId: args.userId,
+      userId,
       title: args.title,
       content: args.content,
       category: args.category,

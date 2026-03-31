@@ -1,24 +1,18 @@
-import { ConvexHttpClient } from "convex/browser";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { api } from "@/convex/_generated/api";
+import { fetchAuthMutation } from "@/lib/auth";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI;
-const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL;
 
 function redirect(request: NextRequest, path: string) {
   return NextResponse.redirect(new URL(path, request.nextUrl.origin));
 }
 
 export async function GET(request: NextRequest) {
-  if (
-    !GOOGLE_CLIENT_ID ||
-    !GOOGLE_CLIENT_SECRET ||
-    !GOOGLE_REDIRECT_URI ||
-    !CONVEX_URL
-  ) {
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REDIRECT_URI) {
     return NextResponse.json(
       {
         error: "Google OAuth not configured",
@@ -26,7 +20,6 @@ export async function GET(request: NextRequest) {
           cid: !!GOOGLE_CLIENT_ID,
           cs: !!GOOGLE_CLIENT_SECRET,
           ru: !!GOOGLE_REDIRECT_URI,
-          cu: !!CONVEX_URL,
         },
       },
       { status: 500 },
@@ -95,9 +88,7 @@ export async function GET(request: NextRequest) {
 
     const userInfo = await userInfoResponse.json();
 
-    const client = new ConvexHttpClient(CONVEX_URL);
-    await client.mutation(api.google.storeGoogleConnection, {
-      userId: "josh",
+    await fetchAuthMutation(api.google.storeGoogleConnection, {
       email: userInfo.email,
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token,

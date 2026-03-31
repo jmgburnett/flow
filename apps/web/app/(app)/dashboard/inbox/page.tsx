@@ -57,13 +57,13 @@ export default function InboxPage() {
 
   const router = useRouter();
   const connections =
-    useQuery(api.google.getGoogleConnections, { userId: "josh" }) ?? [];
+    useQuery(api.google.getGoogleConnections, {}) ?? [];
   const emails =
     useQuery(
       api.google.getEmails,
       filter === "all"
-        ? { userId: "josh" }
-        : { userId: "josh", triageStatus: filter as any },
+        ? {}
+        : { triageStatus: filter as any },
     ) ?? [];
 
   const syncGmail = useAction(api.google.syncGmailInbox);

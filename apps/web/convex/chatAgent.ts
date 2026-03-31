@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { action, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { getAuthenticatedUserId } from "./lib/auth";
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
@@ -597,6 +598,7 @@ async function refreshTokenIfNeeded(
 
 async function handleCheckAvailability(
   ctx: any,
+  userId: string,
   input: Record<string, unknown>,
 ): Promise<string> {
   const { timeMin, timeMax, attendeeEmails } = input as {
@@ -606,7 +608,7 @@ async function handleCheckAvailability(
   };
 
   const connections = await ctx.runQuery(internal.chatAgent.getAllConnections, {
-    userId: "josh",
+    userId,
   });
 
   if (connections.length === 0) {
@@ -683,6 +685,7 @@ async function handleCheckAvailability(
 
 async function handleFindOpenSlots(
   ctx: any,
+  userId: string,
   input: Record<string, unknown>,
 ): Promise<string> {
   const {
@@ -702,7 +705,7 @@ async function handleFindOpenSlots(
   };
 
   const connections = await ctx.runQuery(internal.chatAgent.getAllConnections, {
-    userId: "josh",
+    userId,
   });
 
   if (connections.length === 0) {
@@ -851,6 +854,7 @@ async function handleFindOpenSlots(
 
 async function handleCreateEvent(
   ctx: any,
+  userId: string,
   input: Record<string, unknown>,
 ): Promise<string> {
   const {
@@ -872,7 +876,7 @@ async function handleCreateEvent(
   };
 
   const connections = await ctx.runQuery(internal.chatAgent.getAllConnections, {
-    userId: "josh",
+    userId,
   });
 
   // Find the connection for the specified account
@@ -932,6 +936,7 @@ async function handleCreateEvent(
 
 async function handleGetMyCalendar(
   ctx: any,
+  userId: string,
   input: Record<string, unknown>,
 ): Promise<string> {
   const { daysAhead = 7 } = input as { daysAhead?: number };
@@ -940,7 +945,7 @@ async function handleGetMyCalendar(
   const endTime = now + daysAhead * 24 * 60 * 60 * 1000;
 
   const events = await ctx.runQuery(internal.chatAgent.getUpcomingEvents, {
-    userId: "josh",
+    userId,
     startTime: now,
     endTime,
   });
@@ -963,6 +968,7 @@ async function handleGetMyCalendar(
 
 async function handleLookupContact(
   ctx: any,
+  userId: string,
   input: Record<string, unknown>,
 ): Promise<string> {
   const { nameQuery } = input as { nameQuery: string };
@@ -970,11 +976,11 @@ async function handleLookupContact(
   // Search both contacts and contact_profiles
   const [contacts, profiles] = await Promise.all([
     ctx.runQuery(internal.chatAgent.searchContacts, {
-      userId: "josh",
+      userId,
       nameQuery,
     }),
     ctx.runQuery(internal.chatAgent.searchContactProfiles, {
-      userId: "josh",
+      userId,
       nameQuery,
     }),
   ]);
@@ -1024,6 +1030,7 @@ async function handleLookupContact(
 
 async function handleSearchGlooDirectory(
   ctx: any,
+  userId: string,
   input: Record<string, unknown>,
 ): Promise<string> {
   const { query, pageSize = 10 } = input as {
@@ -1033,7 +1040,7 @@ async function handleSearchGlooDirectory(
 
   // Get the gloo.us connection for org directory access
   const connections = await ctx.runQuery(internal.chatAgent.getAllConnections, {
-    userId: "josh",
+    userId,
   });
 
   const glooConnection = connections.find((c: any) =>
@@ -1150,6 +1157,7 @@ async function searchGlooViaContacts(
 
 async function handleSearchEmails(
   ctx: any,
+  userId: string,
   input: Record<string, unknown>,
 ): Promise<string> {
   const { query, fromPerson, triageStatus, limit } = input as {
@@ -1160,7 +1168,7 @@ async function handleSearchEmails(
   };
 
   const results = await ctx.runQuery(internal.chatAgent.searchEmails, {
-    userId: "josh",
+    userId,
     query,
     fromPerson,
     triageStatus,
@@ -1216,12 +1224,13 @@ async function handleGetEmailThread(
 
 async function handleGetInboxSummary(
   ctx: any,
+  userId: string,
   input: Record<string, unknown>,
 ): Promise<string> {
   const { accountEmail } = input as { accountEmail?: string };
 
   const summary = await ctx.runQuery(internal.chatAgent.getInboxSummary, {
-    userId: "josh",
+    userId,
     accountEmail,
   });
 
@@ -1240,28 +1249,29 @@ async function handleGetInboxSummary(
 
 async function executeTool(
   ctx: any,
+  userId: string,
   toolName: string,
   input: Record<string, unknown>,
 ): Promise<string> {
   switch (toolName) {
     case "check_availability":
-      return handleCheckAvailability(ctx, input);
+      return handleCheckAvailability(ctx, userId, input);
     case "find_open_slots":
-      return handleFindOpenSlots(ctx, input);
+      return handleFindOpenSlots(ctx, userId, input);
     case "create_event":
-      return handleCreateEvent(ctx, input);
+      return handleCreateEvent(ctx, userId, input);
     case "get_my_calendar":
-      return handleGetMyCalendar(ctx, input);
+      return handleGetMyCalendar(ctx, userId, input);
     case "lookup_contact":
-      return handleLookupContact(ctx, input);
+      return handleLookupContact(ctx, userId, input);
     case "search_gloo_directory":
-      return handleSearchGlooDirectory(ctx, input);
+      return handleSearchGlooDirectory(ctx, userId, input);
     case "search_emails":
-      return handleSearchEmails(ctx, input);
+      return handleSearchEmails(ctx, userId, input);
     case "get_email_thread":
       return handleGetEmailThread(ctx, input);
     case "get_inbox_summary":
-      return handleGetInboxSummary(ctx, input);
+      return handleGetInboxSummary(ctx, userId, input);
     default:
       return JSON.stringify({ error: `Unknown tool: ${toolName}` });
   }
@@ -1271,7 +1281,6 @@ async function executeTool(
 
 export const chat = action({
   args: {
-    userId: v.string(),
     message: v.string(),
     conversationHistory: v.array(
       v.object({
@@ -1281,6 +1290,7 @@ export const chat = action({
     ),
   },
   handler: async (ctx, args): Promise<string> => {
+    const userId = await getAuthenticatedUserId(ctx);
     if (!ANTHROPIC_API_KEY) {
       throw new Error("ANTHROPIC_API_KEY not configured");
     }
@@ -1347,7 +1357,12 @@ export const chat = action({
       }> = [];
 
       for (const toolUse of toolUses) {
-        const result = await executeTool(ctx, toolUse.name, toolUse.input);
+        const result = await executeTool(
+          ctx,
+          userId,
+          toolUse.name,
+          toolUse.input,
+        );
         toolResults.push({
           type: "tool_result",
           tool_use_id: toolUse.id,

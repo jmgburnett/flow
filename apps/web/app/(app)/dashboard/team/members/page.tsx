@@ -58,7 +58,6 @@ type SkillLevel = "beginner" | "intermediate" | "advanced" | "expert";
 
 export default function TeamMembersPage() {
   const user = { name: "Josh", email: "josh@onflourish.com" };
-  const userId = "josh";
 
   const [searchQuery, setSearchQuery] = useState("");
   const [deptFilter, setDeptFilter] = useState<string>("all");
@@ -76,7 +75,7 @@ export default function TeamMembersPage() {
   const [formLeadershipStyle, setFormLeadershipStyle] = useState("");
   const [formWorkingStyle, setFormWorkingStyle] = useState("");
 
-  const teamMembers = useQuery(api.team.listTeamMembers, { userId });
+  const teamMembers = useQuery(api.team.listTeamMembers, {});
   const selectedMember = useQuery(
     api.team.getTeamMember,
     selectedMemberId ? { id: selectedMemberId } : "skip",

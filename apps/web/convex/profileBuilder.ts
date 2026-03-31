@@ -8,6 +8,7 @@ import {
   query,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { getAuthenticatedUserId } from "./lib/auth";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
@@ -16,11 +17,13 @@ const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 
 // Get all profiles for a user
 export const listProfiles = query({
-  args: { userId: v.string() },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthenticatedUserId(ctx);
+
     const profiles = await ctx.db
       .query("contact_profiles")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
     return profiles.sort((a, b) => b.emailsSent - a.emailsSent);
   },
@@ -28,12 +31,14 @@ export const listProfiles = query({
 
 // Get profile by email
 export const getProfileByEmail = query({
-  args: { userId: v.string(), email: v.string() },
+  args: { email: v.string() },
   handler: async (ctx, args) => {
+    const userId = await getAuthenticatedUserId(ctx);
+
     return await ctx.db
       .query("contact_profiles")
       .withIndex("by_user_and_email", (q) =>
-        q.eq("userId", args.userId).eq("email", args.email.toLowerCase()),
+        q.eq("userId", userId).eq("email", args.email.toLowerCase()),
       )
       .first();
   },
@@ -65,11 +70,13 @@ export const getProfileForContact = query({
 
 // Get build progress
 export const getBuildProgress = query({
-  args: { userId: v.string() },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthenticatedUserId(ctx);
+
     const builds = await ctx.db
       .query("profile_builds")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .order("desc")
       .first();
     return builds;
@@ -78,11 +85,13 @@ export const getBuildProgress = query({
 
 // Profile count
 export const profileCount = query({
-  args: { userId: v.string() },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthenticatedUserId(ctx);
+
     const profiles = await ctx.db
       .query("contact_profiles")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
     return profiles.length;
   },
@@ -379,10 +388,10 @@ const SYSTEM_PATTERN =
 // Build profiles from email data
 export const buildProfiles = action({
   args: {
-    userId: v.string(),
     maxEmailsPerAccount: v.optional(v.number()), // default 200
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthenticatedUserId(ctx);
     const maxEmails = args.maxEmailsPerAccount ?? 200;
     const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
@@ -391,7 +400,7 @@ export const buildProfiles = action({
     const buildId = await ctx.runMutation(
       internal.profileBuilder.createBuildProgress,
       {
-        userId: args.userId,
+        userId,
       },
     );
 
@@ -407,7 +416,7 @@ export const buildProfiles = action({
       const connections = await ctx.runQuery(
         internal.profileBuilder.getAllConnections,
         {
-          userId: args.userId,
+          userId,
         },
       );
 
@@ -584,7 +593,7 @@ JSON only, no markdown:`,
               const contact = await ctx.runQuery(
                 internal.profileBuilder.findContactByEmail,
                 {
-                  userId: args.userId,
+                  userId,
                   email,
                 },
               );
@@ -600,7 +609,7 @@ JSON only, no markdown:`,
 
               // Upsert the profile
               await ctx.runMutation(internal.profileBuilder.upsertProfile, {
-                userId: args.userId,
+                userId,
                 contactId: contact?._id,
                 email,
                 name: data.name,
@@ -667,8 +676,10 @@ JSON only, no markdown:`,
 
 // Trigger profile build from the UI
 export const startBuildProfiles = mutation({
-  args: { userId: v.string() },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthenticatedUserId(ctx);
+
     // Just a trigger — the actual work happens in the action
     // The UI will call buildProfiles action after this
     return { started: true };
@@ -840,10 +851,9 @@ function isObviouslyJunk(email: string): { junk: boolean; reason: string } {
 
 // Filter profiles: auto-filter obvious junk, then use Claude for ambiguous ones
 export const filterProfiles = action({
-  args: { userId: v.string() },
+  args: {},
   handler: async (
     ctx,
-    args,
   ): Promise<{
     total: number;
     autoFiltered: number;
@@ -853,13 +863,14 @@ export const filterProfiles = action({
     filtered: number;
     message: string;
   }> => {
+    const userId = await getAuthenticatedUserId(ctx);
     const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
 
     const profiles = await ctx.runQuery(
       internal.profileBuilder.getAllProfiles,
       {
-        userId: args.userId,
+        userId,
       },
     );
 
@@ -1017,26 +1028,27 @@ JSON only, no markdown:`,
 // ═══════════════════════════════════════════════
 
 export const enrichFromCalendar = action({
-  args: { userId: v.string() },
+  args: {},
   handler: async (
     ctx,
-    args,
   ): Promise<{
     enriched: number;
     newFromCalendar: number;
     totalMeetings: number;
     message: string;
   }> => {
+    const userId = await getAuthenticatedUserId(ctx);
+
     const profiles = await ctx.runQuery(
       internal.profileBuilder.getAllProfiles,
       {
-        userId: args.userId,
+        userId,
       },
     );
     const events = await ctx.runQuery(
       internal.profileBuilder.getAllCalendarEvents,
       {
-        userId: args.userId,
+        userId,
       },
     );
 
@@ -1138,7 +1150,7 @@ export const enrichFromCalendar = action({
       const contact = await ctx.runQuery(
         internal.profileBuilder.findContactByEmail,
         {
-          userId: args.userId,
+          userId,
           email,
         },
       );
@@ -1149,7 +1161,7 @@ export const enrichFromCalendar = action({
         .replace(/\b\w/g, (c) => c.toUpperCase());
 
       await ctx.runMutation(internal.profileBuilder.upsertProfile, {
-        userId: args.userId,
+        userId,
         contactId: contact?._id,
         email,
         name,
@@ -1185,24 +1197,25 @@ export const enrichFromCalendar = action({
 // ═══════════════════════════════════════════════
 
 export const enrichFromInboundEmails = action({
-  args: { userId: v.string() },
+  args: {},
   handler: async (
     ctx,
-    args,
   ): Promise<{
     enriched: number;
     totalInboundEmails: number;
     uniqueSenders: number;
     message: string;
   }> => {
+    const userId = await getAuthenticatedUserId(ctx);
+
     const profiles = await ctx.runQuery(
       internal.profileBuilder.getAllProfiles,
       {
-        userId: args.userId,
+        userId,
       },
     );
     const emails = await ctx.runQuery(internal.profileBuilder.getAllEmails, {
-      userId: args.userId,
+      userId,
     });
 
     // Count received emails by sender

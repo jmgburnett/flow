@@ -7,25 +7,28 @@ import {
   query,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { getAuthenticatedUserId } from "./lib/auth";
 
 // ─── Schema: stored in user's profile ───
 
 export const getStyleProfile = query({
-  args: { userId: v.string() },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthenticatedUserId(ctx);
     return await ctx.db
       .query("style_profiles")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .first();
   },
 });
 
 export const getAnalysisStatus = query({
-  args: { userId: v.string() },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthenticatedUserId(ctx);
     return await ctx.db
       .query("style_analyses")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .order("desc")
       .first();
   },
@@ -125,7 +128,6 @@ export const getGoogleConnection = internalQuery({
 
 export const analyzeEmailStyle = action({
   args: {
-    userId: v.string(),
     emailCount: v.number(), // How many sent emails to scan (50-500)
     connectionIds: v.optional(v.array(v.id("google_connections"))), // Specific accounts, or all
   },
@@ -133,6 +135,7 @@ export const analyzeEmailStyle = action({
     ctx,
     args,
   ): Promise<{ success: boolean; emailsAnalyzed: number }> => {
+    const userId = await getAuthenticatedUserId(ctx);
     const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
 
@@ -145,7 +148,7 @@ export const analyzeEmailStyle = action({
     const maxEmails = Math.min(Math.max(args.emailCount, 20), 500);
 
     await ctx.runMutation(internal.styleAnalysis.updateAnalysisStatus, {
-      userId: args.userId,
+      userId,
       status: "fetching",
       progress: 5,
       message: "Fetching your sent emails...",
@@ -157,7 +160,7 @@ export const analyzeEmailStyle = action({
       const conns = await ctx.runQuery(
         internal.styleAnalysis.getAllConnections,
         {
-          userId: args.userId,
+          userId,
         },
       );
       connectionIds = conns.map((c: any) => c._id);
@@ -190,7 +193,7 @@ export const analyzeEmailStyle = action({
         accountsUsed.push(conn.email);
 
         await ctx.runMutation(internal.styleAnalysis.updateAnalysisStatus, {
-          userId: args.userId,
+          userId,
           status: "fetching",
           progress: 10 + Math.floor((i / connectionIds.length) * 40),
           message: `Fetching from ${conn.email}...`,
@@ -269,7 +272,7 @@ export const analyzeEmailStyle = action({
 
     if (allEmails.length < 5) {
       await ctx.runMutation(internal.styleAnalysis.updateAnalysisStatus, {
-        userId: args.userId,
+        userId,
         status: "error",
         progress: 0,
         message: "Not enough sent emails found to analyze style.",
@@ -279,7 +282,7 @@ export const analyzeEmailStyle = action({
 
     // ─── Analyze with Claude ───
     await ctx.runMutation(internal.styleAnalysis.updateAnalysisStatus, {
-      userId: args.userId,
+      userId,
       status: "analyzing",
       progress: 60,
       message: `Analyzing ${allEmails.length} emails with AI...`,
@@ -337,7 +340,7 @@ ${emailSamples}`,
     if (!analysisResp.ok) {
       const errText = await analysisResp.text();
       await ctx.runMutation(internal.styleAnalysis.updateAnalysisStatus, {
-        userId: args.userId,
+        userId,
         status: "error",
         message: `AI analysis failed: ${errText.substring(0, 100)}`,
       });
@@ -358,7 +361,7 @@ ${emailSamples}`,
 
     // Save profile
     await ctx.runMutation(internal.styleAnalysis.saveStyleProfile, {
-      userId: args.userId,
+      userId,
       profile: JSON.stringify(profile),
       prompt: profile.draftPrompt || "",
       emailsAnalyzed: allEmails.length,
@@ -366,7 +369,7 @@ ${emailSamples}`,
     });
 
     await ctx.runMutation(internal.styleAnalysis.updateAnalysisStatus, {
-      userId: args.userId,
+      userId,
       status: "complete",
       progress: 100,
       message: `Analyzed ${allEmails.length} emails across ${accountsUsed.length} accounts`,

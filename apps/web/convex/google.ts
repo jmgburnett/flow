@@ -8,6 +8,7 @@ import {
   query,
 } from "./_generated/server";
 import { api, internal } from "./_generated/api";
+import { getAuthenticatedUserId } from "./lib/auth";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
@@ -15,7 +16,6 @@ const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 // Store or update Google OAuth connection
 export const storeGoogleConnection = mutation({
   args: {
-    userId: v.string(),
     email: v.string(),
     accessToken: v.string(),
     refreshToken: v.string(),
@@ -23,6 +23,8 @@ export const storeGoogleConnection = mutation({
     scopes: v.array(v.string()),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthenticatedUserId(ctx);
+
     // Check if connection already exists
     const existing = await ctx.db
       .query("google_connections")
@@ -42,7 +44,7 @@ export const storeGoogleConnection = mutation({
 
     // Create new connection
     const connectionId = await ctx.db.insert("google_connections", {
-      userId: args.userId,
+      userId,
       email: args.email,
       accessToken: args.accessToken,
       refreshToken: args.refreshToken,
@@ -57,13 +59,13 @@ export const storeGoogleConnection = mutation({
 
 // Get all Google connections for a user
 export const getGoogleConnections = query({
-  args: {
-    userId: v.string(),
-  },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthenticatedUserId(ctx);
+
     const connections = await ctx.db
       .query("google_connections")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
     // Don't expose tokens to client
@@ -176,7 +178,6 @@ export const deleteGoogleConnection = mutation({
 // Get emails for a user with optional triage filter
 export const getEmails = query({
   args: {
-    userId: v.string(),
     triageStatus: v.optional(
       v.union(
         v.literal("needs_me"),
@@ -187,11 +188,13 @@ export const getEmails = query({
     ),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthenticatedUserId(ctx);
+
     if (args.triageStatus) {
       const emails = await ctx.db
         .query("emails")
         .withIndex("by_user_and_triage", (q) =>
-          q.eq("userId", args.userId).eq("triageStatus", args.triageStatus!),
+          q.eq("userId", userId).eq("triageStatus", args.triageStatus!),
         )
         .order("desc")
         .take(100);
@@ -200,7 +203,7 @@ export const getEmails = query({
 
     const emails = await ctx.db
       .query("emails")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .order("desc")
       .take(100);
 
@@ -211,14 +214,15 @@ export const getEmails = query({
 // Get calendar events for a user
 export const getCalendarEvents = query({
   args: {
-    userId: v.string(),
     startTime: v.optional(v.number()),
     endTime: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthenticatedUserId(ctx);
+
     let eventsQuery = ctx.db
       .query("calendar_events")
-      .withIndex("by_user_and_time", (q) => q.eq("userId", args.userId));
+      .withIndex("by_user_and_time", (q) => q.eq("userId", userId));
 
     const events = await eventsQuery.order("asc").collect();
 

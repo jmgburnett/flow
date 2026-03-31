@@ -211,13 +211,11 @@ export function LiveFeed({
   const [filter, setFilter] = useState<FilterType>("all");
 
   const tasks = useQuery(api.capture.getLiveTasks, {
-    userId: "josh",
     sessionId,
     filter,
   });
 
   const counts = useQuery(api.capture.getLiveTaskCounts, {
-    userId: "josh",
     sessionId,
   });
 

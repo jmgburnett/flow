@@ -1,18 +1,19 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { getAuthenticatedUserId } from "./lib/auth";
 
 // ─── Team Member Queries ───
 
 // List team members (coworker or team_member type), with optional filters
 export const listTeamMembers = query({
   args: {
-    userId: v.string(),
     department: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthenticatedUserId(ctx);
     const contacts = await ctx.db
       .query("contacts")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
     let teamMembers = contacts.filter(
@@ -120,11 +121,12 @@ export const updateTeamProfile = mutation({
 
 // Build org chart tree from reporting relationships
 export const getOrgChart = query({
-  args: { userId: v.string() },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthenticatedUserId(ctx);
     const contacts = await ctx.db
       .query("contacts")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
     const teamMembers = contacts.filter(
@@ -169,12 +171,13 @@ export const getOrgChart = query({
 
 // Get skill gaps — skills where no team member is expert/advanced
 export const getSkillGaps = query({
-  args: { userId: v.string() },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthenticatedUserId(ctx);
     const skills = await ctx.db.query("skills").collect();
     const contacts = await ctx.db
       .query("contacts")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
     const teamMembers = contacts.filter(
@@ -217,12 +220,13 @@ export const getSkillGaps = query({
 
 // Skill coverage summary
 export const getSkillCoverage = query({
-  args: { userId: v.string() },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthenticatedUserId(ctx);
     const skills = await ctx.db.query("skills").collect();
     const contacts = await ctx.db
       .query("contacts")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
     const teamMembers = contacts.filter(

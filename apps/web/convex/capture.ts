@@ -8,6 +8,7 @@ import {
   query,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { getAuthenticatedUserId } from "./lib/auth";
 
 const ASSEMBLYAI_API_KEY = process.env.ASSEMBLYAI_API_KEY;
 
@@ -15,13 +16,15 @@ const ASSEMBLYAI_API_KEY = process.env.ASSEMBLYAI_API_KEY;
 
 // Start a new capture session
 export const startSession = mutation({
-  args: { userId: v.string() },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthenticatedUserId(ctx);
+
     // Stop any existing active sessions
     const active = await ctx.db
       .query("capture_sessions")
       .withIndex("by_user_and_status", (q) =>
-        q.eq("userId", args.userId).eq("status", "recording"),
+        q.eq("userId", userId).eq("status", "recording"),
       )
       .collect();
 
@@ -36,7 +39,7 @@ export const startSession = mutation({
     const paused = await ctx.db
       .query("capture_sessions")
       .withIndex("by_user_and_status", (q) =>
-        q.eq("userId", args.userId).eq("status", "paused"),
+        q.eq("userId", userId).eq("status", "paused"),
       )
       .collect();
 
@@ -53,7 +56,7 @@ export const startSession = mutation({
     const calendarEvents = await ctx.db
       .query("calendar_events")
       .withIndex("by_user_and_time", (q) =>
-        q.eq("userId", args.userId).lte("startTime", now),
+        q.eq("userId", userId).lte("startTime", now),
       )
       .order("desc")
       .take(10);
@@ -64,7 +67,7 @@ export const startSession = mutation({
     );
 
     return await ctx.db.insert("capture_sessions", {
-      userId: args.userId,
+      userId,
       status: "recording",
       startedAt: now,
       totalDurationMs: 0,
@@ -115,7 +118,11 @@ export const detectMeetingChange = mutation({
       };
     }
 
-    return { changed: false, meetingTitle: session.meetingTitle ?? null, attendees: session.meetingAttendees ?? [] };
+    return {
+      changed: false,
+      meetingTitle: session.meetingTitle ?? null,
+      attendees: session.meetingAttendees ?? [],
+    };
   },
 });
 
@@ -176,13 +183,15 @@ export const stopSession = mutation({
 
 // Get the active session for a user
 export const getActiveSession = query({
-  args: { userId: v.string() },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthenticatedUserId(ctx);
+
     // Check recording first, then paused
     const recording = await ctx.db
       .query("capture_sessions")
       .withIndex("by_user_and_status", (q) =>
-        q.eq("userId", args.userId).eq("status", "recording"),
+        q.eq("userId", userId).eq("status", "recording"),
       )
       .first();
 
@@ -191,7 +200,7 @@ export const getActiveSession = query({
     return await ctx.db
       .query("capture_sessions")
       .withIndex("by_user_and_status", (q) =>
-        q.eq("userId", args.userId).eq("status", "paused"),
+        q.eq("userId", userId).eq("status", "paused"),
       )
       .first();
   },
@@ -200,14 +209,14 @@ export const getActiveSession = query({
 // List recent sessions
 export const listSessions = query({
   args: {
-    userId: v.string(),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthenticatedUserId(ctx);
     const limit = args.limit ?? 10;
     const sessions = await ctx.db
       .query("capture_sessions")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .order("desc")
       .take(limit);
 
@@ -774,7 +783,6 @@ Respond with ONLY a JSON array, no other text:`,
 // Get live tasks for a user (real-time feed)
 export const getLiveTasks = query({
   args: {
-    userId: v.string(),
     sessionId: v.optional(v.id("capture_sessions")),
     filter: v.optional(
       v.union(
@@ -787,6 +795,7 @@ export const getLiveTasks = query({
     ),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthenticatedUserId(ctx);
     let tasks;
     const sessionId = args.sessionId;
 
@@ -798,7 +807,7 @@ export const getLiveTasks = query({
     } else {
       tasks = await ctx.db
         .query("live_tasks")
-        .withIndex("by_user", (q) => q.eq("userId", args.userId))
+        .withIndex("by_user", (q) => q.eq("userId", userId))
         .collect();
     }
 
@@ -822,10 +831,10 @@ export const getLiveTasks = query({
 // Get live task counts by category
 export const getLiveTaskCounts = query({
   args: {
-    userId: v.string(),
     sessionId: v.optional(v.id("capture_sessions")),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthenticatedUserId(ctx);
     let tasks;
     const sessionId = args.sessionId;
     if (sessionId) {
@@ -836,7 +845,7 @@ export const getLiveTaskCounts = query({
     } else {
       tasks = await ctx.db
         .query("live_tasks")
-        .withIndex("by_user", (q) => q.eq("userId", args.userId))
+        .withIndex("by_user", (q) => q.eq("userId", userId))
         .collect();
     }
 

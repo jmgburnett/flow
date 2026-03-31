@@ -56,10 +56,10 @@ export default function MessagesPage() {
   const [newNumber, setNewNumber] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const conversations = useQuery(api.sms.listConversations, { userId: "josh" });
+  const conversations = useQuery(api.sms.listConversations, {});
   const messages = useQuery(
     api.sms.getMessages,
-    selectedPhone ? { userId: "josh", phoneNumber: selectedPhone } : "skip",
+    selectedPhone ? { phoneNumber: selectedPhone } : "skip",
   );
   const sendSMS = useAction(api.sms.sendSMS);
   const markRead = useMutation(api.sms.markRead);
@@ -76,7 +76,7 @@ export default function MessagesPage() {
   const handleSelect = async (phone: string) => {
     setSelectedPhone(phone);
     setShowNewMessage(false);
-    await markRead({ userId: "josh", phoneNumber: phone });
+    await markRead({ phoneNumber: phone });
   };
 
   const handleSend = async () => {
@@ -84,7 +84,6 @@ export default function MessagesPage() {
     setIsSending(true);
     try {
       await sendSMS({
-        userId: "josh",
         to: selectedPhone,
         body: messageInput,
         contactName: selectedConvo?.contactName,

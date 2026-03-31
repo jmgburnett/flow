@@ -99,10 +99,9 @@ function OrgTreeNode({ node, depth = 0 }: { node: OrgNode; depth?: number }) {
 
 export default function OrgChartPage() {
   const user = { name: "Josh", email: "josh@onflourish.com" };
-  const userId = "josh";
 
-  const orgChart = useQuery(api.team.getOrgChart, { userId });
-  const teamMembers = useQuery(api.team.listTeamMembers, { userId });
+  const orgChart = useQuery(api.team.getOrgChart, {});
+  const teamMembers = useQuery(api.team.listTeamMembers, {});
 
   // Derive unique departments for the legend
   const departments = [

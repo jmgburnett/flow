@@ -134,7 +134,9 @@ export function CaptureProvider({ children }: { children: ReactNode }) {
   const pausedElapsedRef = useRef(0);
   const workletUrlRef = useRef<string | null>(null);
 
-  const [currentMeeting, setCurrentMeeting] = useState<MeetingContext | null>(null);
+  const [currentMeeting, setCurrentMeeting] = useState<MeetingContext | null>(
+    null,
+  );
   const meetingPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const startSession = useMutation(api.capture.startSession);
@@ -251,7 +253,7 @@ export function CaptureProvider({ children }: { children: ReactNode }) {
       });
       streamRef.current = stream;
 
-      const sid = await startSession({ userId: "josh" });
+      const sid = await startSession({});
       sessionIdRef.current = sid;
       setSessionId(sid);
 
@@ -264,21 +266,30 @@ export function CaptureProvider({ children }: { children: ReactNode }) {
             attendees: meetingResult.attendees ?? [],
           });
         }
-      } catch { /* ignore if no meeting */ }
+      } catch {
+        /* ignore if no meeting */
+      }
 
       // Poll for meeting changes every 60 seconds
       meetingPollRef.current = setInterval(async () => {
         if (!sessionIdRef.current) return;
         try {
-          const result = await detectMeeting({ sessionId: sessionIdRef.current });
+          const result = await detectMeeting({
+            sessionId: sessionIdRef.current,
+          });
           if (result?.changed) {
             setCurrentMeeting(
               result.meetingTitle
-                ? { meetingTitle: result.meetingTitle, attendees: result.attendees ?? [] }
+                ? {
+                    meetingTitle: result.meetingTitle,
+                    attendees: result.attendees ?? [],
+                  }
                 : null,
             );
           }
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
       }, 60_000);
 
       // Connect WebSocket first

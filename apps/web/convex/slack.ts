@@ -7,12 +7,12 @@ import {
   query,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { getAuthenticatedUserId } from "./lib/auth";
 
 // ─── Connections ───
 
 export const storeSlackConnection = mutation({
   args: {
-    userId: v.string(),
     teamId: v.string(),
     teamName: v.string(),
     botToken: v.string(),
@@ -22,6 +22,8 @@ export const storeSlackConnection = mutation({
     scopes: v.array(v.string()),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthenticatedUserId(ctx);
+
     const existing = await ctx.db
       .query("slack_connections")
       .withIndex("by_team", (q) => q.eq("teamId", args.teamId))
@@ -40,17 +42,20 @@ export const storeSlackConnection = mutation({
 
     return await ctx.db.insert("slack_connections", {
       ...args,
+      userId,
       connectedAt: Date.now(),
     });
   },
 });
 
 export const getSlackConnections = query({
-  args: { userId: v.string() },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthenticatedUserId(ctx);
+
     const connections = await ctx.db
       .query("slack_connections")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
     return connections.map((c) => ({
       _id: c._id,
@@ -74,18 +79,18 @@ export const deleteSlackConnection = mutation({
 
 export const getMessages = query({
   args: {
-    userId: v.string(),
     needsResponse: v.optional(v.boolean()),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthenticatedUserId(ctx);
     const limit = args.limit ?? 50;
 
     if (args.needsResponse !== undefined) {
       return await ctx.db
         .query("slack_messages")
         .withIndex("by_user_and_needs_response", (q) =>
-          q.eq("userId", args.userId).eq("needsResponse", args.needsResponse!),
+          q.eq("userId", userId).eq("needsResponse", args.needsResponse!),
         )
         .order("desc")
         .take(limit);
@@ -93,19 +98,21 @@ export const getMessages = query({
 
     return await ctx.db
       .query("slack_messages")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .order("desc")
       .take(limit);
   },
 });
 
 export const getUnrepliedCount = query({
-  args: { userId: v.string() },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthenticatedUserId(ctx);
+
     const messages = await ctx.db
       .query("slack_messages")
       .withIndex("by_user_and_needs_response", (q) =>
-        q.eq("userId", args.userId).eq("needsResponse", true),
+        q.eq("userId", userId).eq("needsResponse", true),
       )
       .collect();
     return messages.length;

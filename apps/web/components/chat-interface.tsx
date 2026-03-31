@@ -90,7 +90,6 @@ export function ChatInterface() {
 
   // Load persisted messages from Convex
   const storedMessages = useQuery(api.chat.getMessages, {
-    userId: "josh",
     limit: 50,
   });
   const processMessage = useAction(api.chat.processMessage);
@@ -113,7 +112,7 @@ export function ChatInterface() {
     setSending(true);
 
     try {
-      await processMessage({ userId: "josh", message: userMsg });
+      await processMessage({ message: userMsg });
     } catch (error) {
       console.error("Chat error:", error);
       // The error will show in the console; messages are persisted so UI updates via query

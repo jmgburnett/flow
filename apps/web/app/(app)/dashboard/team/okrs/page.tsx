@@ -61,7 +61,6 @@ const KR_STATUS_COLORS = {
 
 export default function OKRsPage() {
   const user = { name: "Josh", email: "josh@onflourish.com" };
-  const userId = "josh";
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("active");
   const [expandedObj, setExpandedObj] = useState<Set<string>>(new Set());
@@ -84,9 +83,8 @@ export default function OKRsPage() {
   const [krUnit, setKrUnit] = useState("");
   const [krOwnerName, setKrOwnerName] = useState("");
 
-  const dashboard = useQuery(api.okrs.getOKRDashboard, { userId });
+  const dashboard = useQuery(api.okrs.getOKRDashboard, {});
   const allObjectives = useQuery(api.okrs.listObjectives, {
-    userId,
     status: statusFilter === "all" ? undefined : (statusFilter as any),
   });
 
@@ -127,7 +125,6 @@ export default function OKRsPage() {
       ? new Date(objEnd).getTime()
       : Date.now() + 90 * 24 * 60 * 60 * 1000;
     await createObjective({
-      userId,
       title: objTitle,
       description: objDesc || undefined,
       startDate: start,
@@ -141,7 +138,6 @@ export default function OKRsPage() {
     if (!showCreateKR || !krTitle.trim() || !krTarget) return;
     await createKeyResult({
       objectiveId: showCreateKR,
-      userId,
       title: krTitle,
       targetValue: Number(krTarget),
       unit: krUnit || undefined,

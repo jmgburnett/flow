@@ -18,12 +18,11 @@ import { cn } from "@/lib/utils";
 
 export default function TeamDashboardPage() {
   const user = { name: "Josh", email: "josh@onflourish.com" };
-  const userId = "josh";
 
-  const skillCoverage = useQuery(api.team.getSkillCoverage, { userId });
-  const okrDashboard = useQuery(api.okrs.getOKRDashboard, { userId });
-  const actionCounts = useQuery(api.meetingActions.getActionCounts, { userId });
-  const teamMembers = useQuery(api.team.listTeamMembers, { userId });
+  const skillCoverage = useQuery(api.team.getSkillCoverage, {});
+  const okrDashboard = useQuery(api.okrs.getOKRDashboard, {});
+  const actionCounts = useQuery(api.meetingActions.getActionCounts, {});
+  const teamMembers = useQuery(api.team.listTeamMembers, {});
 
   const teamSize = teamMembers?.length ?? 0;
   const coveragePct = skillCoverage?.coveragePercent ?? 0;

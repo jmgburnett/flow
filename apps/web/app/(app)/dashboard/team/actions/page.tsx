@@ -57,7 +57,6 @@ function timeAgo(ts: number): string {
 
 export default function MeetingActionsPage() {
   const user = { name: "Josh", email: "josh@onflourish.com" };
-  const userId = "josh";
 
   const [statusFilter, setStatusFilter] =
     useState<StatusFilter>("pending_review");
@@ -66,10 +65,9 @@ export default function MeetingActionsPage() {
   const [extracting, setExtracting] = useState(false);
 
   const actions = useQuery(api.meetingActions.listMeetingActions, {
-    userId,
     status: statusFilter === "all" ? undefined : (statusFilter as any),
   });
-  const counts = useQuery(api.meetingActions.getActionCounts, { userId });
+  const counts = useQuery(api.meetingActions.getActionCounts, {});
 
   const confirmAction = useMutation(api.meetingActions.confirmAction);
   const dismissAction = useMutation(api.meetingActions.dismissAction);
@@ -85,7 +83,7 @@ export default function MeetingActionsPage() {
   }
 
   async function handleConvert(id: Id<"meeting_actions">) {
-    await convertToTask({ id, userId });
+    await convertToTask({ id });
   }
 
   async function handleManualCreate() {
@@ -94,7 +92,6 @@ export default function MeetingActionsPage() {
     const lines = transcriptText.split("\n").filter((l) => l.trim());
     for (const line of lines) {
       await createAction({
-        userId,
         action: line.trim(),
       });
     }

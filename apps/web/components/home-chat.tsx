@@ -107,7 +107,6 @@ function ChatHistory({
   onClose: () => void;
 }) {
   const conversations = useQuery(api.chat.listConversations, {
-    userId: "josh",
     limit: 30,
   });
   const deleteConversation = useMutation(api.chat.deleteConversation);
@@ -213,8 +212,8 @@ export function HomeChat() {
   const storedMessages = useQuery(
     api.chat.getMessages,
     activeConversationId
-      ? { userId: "josh", conversationId: activeConversationId, limit: 50 }
-      : { userId: "josh", limit: 0 }, // Don't load messages when no conversation selected
+      ? { conversationId: activeConversationId, limit: 50 }
+      : { limit: 0 }, // Don't load messages when no conversation selected
   );
   const processMessage = useAction(api.chat.processMessage);
 
@@ -237,7 +236,6 @@ export function HomeChat() {
 
     try {
       const result = await processMessage({
-        userId: "josh",
         conversationId: activeConversationId ?? undefined,
         message: msgText,
       });

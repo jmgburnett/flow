@@ -85,7 +85,9 @@ export function LiveCaptureBar() {
           <span className="text-xs text-muted-foreground">
             {isPaused ? "Paused" : "Recording"}
             {finalCount > 0 && (
-              <span className="ml-1.5 text-primary">· {finalCount} segments</span>
+              <span className="ml-1.5 text-primary">
+                · {finalCount} segments
+              </span>
             )}
           </span>
           {currentMeeting?.meetingTitle && (
@@ -93,8 +95,10 @@ export function LiveCaptureBar() {
               📅 {currentMeeting.meetingTitle}
               {currentMeeting.attendees.length > 0 && (
                 <span className="text-muted-foreground font-normal">
-                  {" "}· {currentMeeting.attendees.slice(0, 3).join(", ")}
-                  {currentMeeting.attendees.length > 3 && ` +${currentMeeting.attendees.length - 3}`}
+                  {" "}
+                  · {currentMeeting.attendees.slice(0, 3).join(", ")}
+                  {currentMeeting.attendees.length > 3 &&
+                    ` +${currentMeeting.attendees.length - 3}`}
                 </span>
               )}
             </span>

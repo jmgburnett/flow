@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { getAuthenticatedUserId } from "./lib/auth";
 
 const statusValidator = v.union(
   v.literal("pending_review"),
@@ -11,13 +12,13 @@ const statusValidator = v.union(
 // List meeting actions for a user
 export const listMeetingActions = query({
   args: {
-    userId: v.string(),
     status: v.optional(statusValidator),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthenticatedUserId(ctx);
     const all = await ctx.db
       .query("meeting_actions")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
     const filtered = args.status
@@ -41,7 +42,6 @@ export const listByRecording = query({
 // Create a meeting action (for manual or AI-extracted)
 export const createMeetingAction = mutation({
   args: {
-    userId: v.string(),
     recordingId: v.optional(v.id("recordings")),
     sourceText: v.optional(v.string()),
     action: v.string(),
@@ -52,8 +52,10 @@ export const createMeetingAction = mutation({
     dueDate: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthenticatedUserId(ctx);
     return await ctx.db.insert("meeting_actions", {
       ...args,
+      userId,
       status: "pending_review",
       createdAt: Date.now(),
     });
@@ -91,15 +93,15 @@ export const dismissAction = mutation({
 export const convertToTask = mutation({
   args: {
     id: v.id("meeting_actions"),
-    userId: v.string(),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthenticatedUserId(ctx);
     const action = await ctx.db.get(args.id);
     if (!action) throw new Error("Meeting action not found");
 
     // Create task
     const taskId = await ctx.db.insert("tasks", {
-      userId: args.userId,
+      userId,
       title: action.action,
       description: action.sourceText
         ? `From meeting transcript: "${action.sourceText}"`
@@ -124,7 +126,6 @@ export const convertToTask = mutation({
 // Batch create actions (used by AI extraction)
 export const batchCreateActions = mutation({
   args: {
-    userId: v.string(),
     recordingId: v.optional(v.id("recordings")),
     actions: v.array(
       v.object({
@@ -138,10 +139,11 @@ export const batchCreateActions = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthenticatedUserId(ctx);
     const ids = [];
     for (const item of args.actions) {
       const id = await ctx.db.insert("meeting_actions", {
-        userId: args.userId,
+        userId,
         recordingId: args.recordingId,
         action: item.action,
         sourceText: item.sourceText,
@@ -160,11 +162,12 @@ export const batchCreateActions = mutation({
 
 // Get action counts by status
 export const getActionCounts = query({
-  args: { userId: v.string() },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthenticatedUserId(ctx);
     const all = await ctx.db
       .query("meeting_actions")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
     return {

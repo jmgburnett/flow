@@ -6,12 +6,12 @@ import type { QueryCtx, MutationCtx, ActionCtx } from "../_generated/server";
  * Throws "Unauthorized" if no valid session exists.
  */
 export async function getAuthenticatedUserId(
-	ctx: QueryCtx | MutationCtx | ActionCtx,
+  ctx: QueryCtx | MutationCtx | ActionCtx,
 ): Promise<string> {
-	const identity = await ctx.auth.getUserIdentity();
-	if (!identity) {
-		throw new Error("Unauthorized");
-	}
-	// BetterAuth stores the user ID in the `subject` field of the identity token
-	return identity.subject;
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) {
+    throw new Error("Unauthorized");
+  }
+  // BetterAuth stores the user ID in the `subject` field of the identity token
+  return identity.subject;
 }

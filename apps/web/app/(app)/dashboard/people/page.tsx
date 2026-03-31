@@ -96,8 +96,6 @@ export default function PeoplePage() {
     email: "josh@onflourish.com",
     image: undefined as string | undefined,
   };
-  const userId = "josh";
-
   const [filter, setFilter] = useState<FilterType>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [showReviewQueue, setShowReviewQueue] = useState(false);
@@ -116,15 +114,14 @@ export default function PeoplePage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const contacts = useQuery(api.people.list, {
-    userId,
     type: filter === "all" ? undefined : filter,
   });
 
-  const pendingContacts = useQuery(api.people.listPending, { userId });
-  const pendingCount = useQuery(api.people.pendingCount, { userId });
+  const pendingContacts = useQuery(api.people.listPending, {});
+  const pendingCount = useQuery(api.people.pendingCount, {});
 
   // Load all profiles — these ARE the primary people data
-  const profiles = useQuery(api.profileBuilder.listProfiles, { userId });
+  const profiles = useQuery(api.profileBuilder.listProfiles, {});
 
   const createContact = useMutation(api.people.create);
   const updateContact = useMutation(api.people.update);
@@ -273,7 +270,6 @@ export default function PeoplePage() {
       .filter(Boolean);
     if (isCreating) {
       await createContact({
-        userId,
         name: formName || "Unknown",
         emails,
         phones,

@@ -77,9 +77,6 @@ export default function MemoryPage() {
     image: undefined as string | undefined,
   };
 
-  // TODO: Replace with real user ID from auth
-  const userId = "user_josh";
-
   const [selectedCategory, setSelectedCategory] = useState<Category | "all">(
     "all",
   );
@@ -96,7 +93,6 @@ export default function MemoryPage() {
   const [formPinned, setFormPinned] = useState(false);
 
   const memories = useQuery(api.memories.list, {
-    userId,
     category: selectedCategory === "all" ? undefined : selectedCategory,
   });
 
@@ -151,7 +147,6 @@ export default function MemoryPage() {
 
     if (isCreating) {
       await createMemory({
-        userId,
         title: formTitle || "Untitled",
         content: formContent,
         category: formCategory,

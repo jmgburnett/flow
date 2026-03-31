@@ -114,7 +114,6 @@ function PastSessionsList({
   onSelect: (id: Id<"capture_sessions">) => void;
 }) {
   const sessions = useQuery(api.capture.listSessions, {
-    userId: "josh",
     limit: 20,
   });
   const toggleJournal = useMutation(api.journal.toggleSessionJournal);

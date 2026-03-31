@@ -5,6 +5,7 @@ import {
   mutation,
   query,
 } from "./_generated/server";
+import { getAuthenticatedUserId } from "./lib/auth";
 
 const contactTypeValidator = v.union(
   v.literal("contact"),
@@ -24,21 +25,21 @@ const sourceValidator = v.union(
 
 export const list = query({
   args: {
-    userId: v.string(),
     type: v.optional(contactTypeValidator),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthenticatedUserId(ctx);
     if (args.type) {
       return await ctx.db
         .query("contacts")
         .withIndex("by_user_and_type", (q) =>
-          q.eq("userId", args.userId).eq("type", args.type!),
+          q.eq("userId", userId).eq("type", args.type!),
         )
         .collect();
     }
     const contacts = await ctx.db
       .query("contacts")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
     // Sort by most recently interacted
     return contacts.sort(
@@ -54,7 +55,6 @@ export const get = query({
 
 export const create = mutation({
   args: {
-    userId: v.string(),
     name: v.string(),
     emails: v.optional(v.array(v.string())),
     phones: v.optional(v.array(v.string())),
@@ -65,9 +65,11 @@ export const create = mutation({
     sources: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthenticatedUserId(ctx);
     const now = Date.now();
     return await ctx.db.insert("contacts", {
       ...args,
+      userId,
       lastInteraction: now,
       interactionCount: 0,
       createdAt: now,
@@ -105,12 +107,13 @@ export const remove = mutation({
 // ─── Pending Contacts ───
 
 export const listPending = query({
-  args: { userId: v.string() },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthenticatedUserId(ctx);
     const pending = await ctx.db
       .query("pending_contacts")
       .withIndex("by_user_and_status", (q) =>
-        q.eq("userId", args.userId).eq("status", "pending"),
+        q.eq("userId", userId).eq("status", "pending"),
       )
       .collect();
     return pending.sort((a, b) => b.createdAt - a.createdAt);
@@ -118,12 +121,13 @@ export const listPending = query({
 });
 
 export const pendingCount = query({
-  args: { userId: v.string() },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthenticatedUserId(ctx);
     const pending = await ctx.db
       .query("pending_contacts")
       .withIndex("by_user_and_status", (q) =>
-        q.eq("userId", args.userId).eq("status", "pending"),
+        q.eq("userId", userId).eq("status", "pending"),
       )
       .collect();
     return pending.length;
