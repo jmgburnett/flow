@@ -11,6 +11,7 @@
 import type * as capture from "../capture.js";
 import type * as chat from "../chat.js";
 import type * as chatAgent from "../chatAgent.js";
+import type * as cleanup from "../cleanup.js";
 import type * as crons from "../crons.js";
 import type * as designTokens from "../designTokens.js";
 import type * as devAuth from "../devAuth.js";
@@ -18,6 +19,9 @@ import type * as functions from "../functions.js";
 import type * as google from "../google.js";
 import type * as http from "../http.js";
 import type * as journal from "../journal.js";
+import type * as lib_audit from "../lib/audit.js";
+import type * as lib_auth from "../lib/auth.js";
+import type * as lib_crypto from "../lib/crypto.js";
 import type * as meetingActions from "../meetingActions.js";
 import type * as memories from "../memories.js";
 import type * as okrs from "../okrs.js";
@@ -40,6 +44,7 @@ declare const fullApi: ApiFromModules<{
   capture: typeof capture;
   chat: typeof chat;
   chatAgent: typeof chatAgent;
+  cleanup: typeof cleanup;
   crons: typeof crons;
   designTokens: typeof designTokens;
   devAuth: typeof devAuth;
@@ -47,6 +52,9 @@ declare const fullApi: ApiFromModules<{
   google: typeof google;
   http: typeof http;
   journal: typeof journal;
+  "lib/audit": typeof lib_audit;
+  "lib/auth": typeof lib_auth;
+  "lib/crypto": typeof lib_crypto;
   meetingActions: typeof meetingActions;
   memories: typeof memories;
   okrs: typeof okrs;

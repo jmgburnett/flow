@@ -25,4 +25,14 @@ crons.daily(
   { fileKey: "UA7g21UklfSbtc2fXvNOHS" },
 );
 
+// ═══════════════════════════════════════════════
+// Daily data retention cleanup — runs at 3 AM CT (09:00 UTC)
+// Removes old emails (90d), audio chunks (30d), stale pending contacts (30d)
+// ═══════════════════════════════════════════════
+crons.daily(
+  "daily-retention-cleanup",
+  { hourUTC: 9, minuteUTC: 0 },
+  internal.cleanup.runRetentionCleanup,
+);
+
 export default crons;
