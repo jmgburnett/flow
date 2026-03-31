@@ -11,11 +11,11 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  // Protect dashboard routes
-  if (false && pathname.startsWith("/dashboard")) {
-    if (!hasSession) {
-      return NextResponse.redirect(new URL("/login", request.url));
-    }
+  // Protect dashboard routes — redirect unauthenticated users to login
+  if (pathname.startsWith("/dashboard") && !hasSession) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("redirect", pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
   // Redirect authenticated users away from auth pages
