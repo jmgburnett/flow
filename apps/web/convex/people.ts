@@ -86,6 +86,7 @@ export const update = mutation({
     company: v.optional(v.string()),
     role: v.optional(v.string()),
     notes: v.optional(v.string()),
+    engineeringManagerId: v.optional(v.id("contacts")),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;
@@ -100,6 +101,58 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id("contacts") },
   handler: async (ctx, args) => ctx.db.delete(args.id),
+});
+
+// ─── Designations ───
+
+export const toggleDesignation = mutation({
+  args: {
+    id: v.id("contacts"),
+    designation: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const contact = await ctx.db.get(args.id);
+    if (!contact) throw new Error("Contact not found");
+    const current = contact.designations ?? [];
+    const idx = current.indexOf(args.designation);
+    const updated = idx >= 0
+      ? current.filter((d) => d !== args.designation)
+      : [...current, args.designation];
+    await ctx.db.patch(args.id, {
+      designations: updated,
+      updatedAt: Date.now(),
+    });
+    return updated;
+  },
+});
+
+export const setEngineeringManager = mutation({
+  args: {
+    id: v.id("contacts"),
+    engineeringManagerId: v.optional(v.id("contacts")),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, {
+      engineeringManagerId: args.engineeringManagerId,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const listByDesignation = query({
+  args: {
+    userId: v.string(),
+    designation: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const contacts = await ctx.db
+      .query("contacts")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+    return contacts.filter(
+      (c) => c.designations?.includes(args.designation) ?? false,
+    );
+  },
 });
 
 // ─── Pending Contacts ───

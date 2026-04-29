@@ -132,6 +132,12 @@ export default function PeoplePage() {
   const approvePending = useMutation(api.people.approvePending);
   const mergePending = useMutation(api.people.mergePending);
   const dismissPending = useMutation(api.people.dismissPending);
+  const toggleDesignation = useMutation(api.people.toggleDesignation);
+  const setEngineeringManager = useMutation(api.people.setEngineeringManager);
+  const engineeringManagers = useQuery(api.people.listByDesignation, {
+    userId,
+    designation: "engineering_manager",
+  });
 
   // Build a lookup map: email → contact (for linking)
   const contactMap = new Map<string, any>();
@@ -167,6 +173,8 @@ export default function PeoplePage() {
         role: linkedContact?.role,
         notes: linkedContact?.notes,
         sources: profile.sources,
+        designations: linkedContact?.designations,
+        engineeringManagerId: linkedContact?.engineeringManagerId,
         lastInteraction:
           profile.lastInteractionDate || linkedContact?.lastInteraction,
         interactionCount:
@@ -330,11 +338,21 @@ export default function PeoplePage() {
 
   const isDialogOpen = isCreating || editing !== null;
 
+  // Helper: look up EM name by id
+  function getManagerName(emId: any): string | null {
+    if (!emId || !engineeringManagers) return null;
+    const mgr = engineeringManagers.find((m: any) => m._id === emId);
+    return mgr?.name ?? null;
+  }
+
   // ─── Person Detail View ───
   if (selectedContact) {
     const contact = selectedContact;
     const config = TYPE_CONFIG[contact.type as ContactType];
     const profile = getProfile(contact);
+    const isEM = contact.designations?.includes("engineering_manager") ?? false;
+    const showDesignationToggle = contact.type === "coworker" || contact.type === "team_member";
+    const emName = getManagerName(contact.engineeringManagerId);
 
     return (
       <DashboardLayout user={user}>
@@ -354,7 +372,7 @@ export default function PeoplePage() {
                 {config?.icon ?? "👤"}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <h2 className="font-display font-semibold text-xl tracking-tight">
                     {contact.name}
                   </h2>
@@ -367,12 +385,25 @@ export default function PeoplePage() {
                   >
                     {config?.label}
                   </Badge>
+                  {isEM && (
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px] bg-indigo-600 text-white shrink-0"
+                    >
+                      Engineering Manager
+                    </Badge>
+                  )}
                 </div>
                 {(contact.role || contact.company) && (
                   <p className="text-sm text-muted-foreground">
                     {contact.role}
                     {contact.role && contact.company && " · "}
                     {contact.company}
+                  </p>
+                )}
+                {emName && (
+                  <p className="text-xs text-indigo-500 mt-0.5">
+                    EM: {emName}
                   </p>
                 )}
                 <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted-foreground">
@@ -435,6 +466,94 @@ export default function PeoplePage() {
               ))}
             </div>
           </div>
+
+          {/* Engineering Manager Designation & Assignment */}
+          {showDesignationToggle && (
+            <div className="glass-card rounded-2xl p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <Briefcase className="h-4 w-4 text-indigo-500" />
+                <h3 className="font-display font-semibold text-sm">
+                  Engineering Management
+                </h3>
+              </div>
+
+              {/* Toggle EM designation */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Engineering Manager</p>
+                  <p className="text-xs text-muted-foreground">
+                    Designate this person as an engineering manager
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant={isEM ? "default" : "outline"}
+                  className={cn(
+                    "rounded-xl text-xs",
+                    isEM && "bg-indigo-600 hover:bg-indigo-700",
+                  )}
+                  onClick={async () => {
+                    await toggleDesignation({
+                      id: contact._id,
+                      designation: "engineering_manager",
+                    });
+                    // Update local state
+                    setSelectedContact({
+                      ...contact,
+                      designations: isEM
+                        ? (contact.designations ?? []).filter(
+                            (d: string) => d !== "engineering_manager",
+                          )
+                        : [...(contact.designations ?? []), "engineering_manager"],
+                    });
+                  }}
+                >
+                  {isEM ? "✓ Designated" : "Designate"}
+                </Button>
+              </div>
+
+              {/* Assign EM */}
+              <div>
+                <p className="text-sm font-medium mb-1.5">
+                  Assigned Engineering Manager
+                </p>
+                <Select
+                  value={contact.engineeringManagerId ?? "none"}
+                  onValueChange={async (val) => {
+                    const emId = val === "none" ? undefined : val;
+                    await setEngineeringManager({
+                      id: contact._id,
+                      engineeringManagerId: emId as any,
+                    });
+                    setSelectedContact({
+                      ...contact,
+                      engineeringManagerId: emId,
+                    });
+                  }}
+                >
+                  <SelectTrigger className="rounded-xl">
+                    <SelectValue placeholder="Select an engineering manager" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No manager assigned</SelectItem>
+                    {engineeringManagers
+                      ?.filter((m: any) => m._id !== contact._id)
+                      .map((m: any) => (
+                        <SelectItem key={m._id} value={m._id}>
+                          {m.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                {engineeringManagers?.length === 0 && (
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    No engineering managers designated yet. Designate someone as
+                    an EM first.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* AI Profile */}
           {profile ? (
@@ -825,6 +944,8 @@ export default function PeoplePage() {
             filteredContacts.map((contact: any) => {
               const config = TYPE_CONFIG[contact.type as ContactType];
               const profile = getProfile(contact);
+              const contactIsEM = contact.designations?.includes("engineering_manager") ?? false;
+              const contactEMName = getManagerName(contact.engineeringManagerId);
               return (
                 <button
                   key={contact._id}
@@ -851,7 +972,20 @@ export default function PeoplePage() {
                           >
                             {config?.label}
                           </Badge>
+                          {contactIsEM && (
+                            <Badge
+                              variant="secondary"
+                              className="text-[10px] bg-indigo-600 text-white shrink-0"
+                            >
+                              EM
+                            </Badge>
+                          )}
                         </div>
+                        {contactEMName && (
+                          <p className="text-[10px] text-indigo-500 mb-0.5">
+                            EM: {contactEMName}
+                          </p>
+                        )}
                         {/* Show AI summary if available, otherwise role/company */}
                         {profile?.relationshipSummary ? (
                           <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">

@@ -160,6 +160,8 @@ export default defineSchema({
     department: v.optional(v.string()),
     location: v.optional(v.string()),
     jobDescription: v.optional(v.string()),
+    designations: v.optional(v.array(v.string())),
+    engineeringManagerId: v.optional(v.id("contacts")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
