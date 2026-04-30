@@ -153,7 +153,7 @@ export function CaptureProvider({ children }: { children: ReactNode }) {
       }
       const { token } = await res.json();
 
-      const wsUrl = `${ASSEMBLYAI_WS_URL}?sample_rate=${SAMPLE_RATE}&token=${token}`;
+      const wsUrl = `${ASSEMBLYAI_WS_URL}?sample_rate=${SAMPLE_RATE}&speech_model=universal-streaming-english&format_turns=true&token=${token}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
