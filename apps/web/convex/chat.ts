@@ -132,6 +132,21 @@ export const getMessages = query({
   },
 });
 
+// Update message content (for streaming)
+export const updateMessageContent = mutation({
+  args: {
+    messageId: v.id("chat_messages"),
+    content: v.string(),
+    isStreaming: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.messageId, {
+      content: args.content,
+      ...(args.isStreaming !== undefined ? { isStreaming: args.isStreaming } : {}),
+    });
+  },
+});
+
 // ─── Process Message ───
 
 export const processMessage = action({
@@ -176,19 +191,34 @@ export const processMessage = action({
       content: msg.content,
     }));
 
-    // Call AI agent
-    const response = await ctx.runAction(api.chatAgent.chat, {
-      userId: args.userId,
-      message: args.message,
-      conversationHistory: history,
-    });
-
-    // Store assistant response
-    await ctx.runMutation(api.chat.sendMessage, {
+    // Create placeholder assistant message for streaming
+    const assistantMsgId = await ctx.runMutation(api.chat.sendMessage, {
       userId: args.userId,
       conversationId,
       role: "assistant",
+      content: "",
+    });
+
+    // Mark as streaming
+    await ctx.runMutation(api.chat.updateMessageContent, {
+      messageId: assistantMsgId,
+      content: "",
+      isStreaming: true,
+    });
+
+    // Call AI agent with streaming
+    const response = await ctx.runAction(api.chatAgent.chatStreaming, {
+      userId: args.userId,
+      message: args.message,
+      conversationHistory: history,
+      messageId: assistantMsgId,
+    });
+
+    // Final update — mark streaming complete
+    await ctx.runMutation(api.chat.updateMessageContent, {
+      messageId: assistantMsgId,
       content: response,
+      isStreaming: false,
     });
 
     return { response, conversationId: conversationId as string };

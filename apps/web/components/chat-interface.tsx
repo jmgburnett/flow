@@ -122,6 +122,9 @@ export function ChatInterface() {
     }
   };
 
+  // Check if any message is currently streaming
+  const isStreaming = storedMessages?.some((msg) => msg.isStreaming) ?? false;
+
   // Combine stored messages with a default greeting if empty
   const displayMessages =
     storedMessages && storedMessages.length > 0
@@ -129,6 +132,7 @@ export function ChatInterface() {
           role: msg.role as "user" | "assistant",
           content: msg.content,
           time: fmt(new Date(msg.timestamp)),
+          isStreaming: msg.isStreaming ?? false,
         }))
       : [
           {
@@ -136,6 +140,7 @@ export function ChatInterface() {
             content:
               "Hey Josh! I'm Flobot — your AI Chief of Staff. I can check your calendar, find open slots, and schedule meetings. What do you need?",
             time: fmt(new Date()),
+            isStreaming: false,
           },
         ];
 
@@ -204,7 +209,10 @@ export function ChatInterface() {
                 </div>
                 <div className="max-w-[85%] pl-5">
                   <div className="text-sm leading-relaxed text-foreground">
-                    {renderMessage(msg.content)}
+                    {msg.content ? renderMessage(msg.content) : null}
+                    {msg.isStreaming && (
+                      <span className="inline-block w-1.5 h-4 bg-primary/70 ml-0.5 animate-pulse rounded-sm align-text-bottom" />
+                    )}
                   </div>
                 </div>
               </div>
@@ -212,8 +220,8 @@ export function ChatInterface() {
           </div>
         ))}
 
-        {/* Typing indicator */}
-        {sending && (
+        {/* Typing indicator — only show before streaming starts */}
+        {sending && !isStreaming && (
           <div className="flex flex-col items-start">
             <div className="flex items-center gap-1.5 mb-1">
               <Avatar className="h-4 w-4">

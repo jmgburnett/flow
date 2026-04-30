@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { action, internalQuery } from "./_generated/server";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
@@ -1269,6 +1269,7 @@ async function executeTool(
 
 // ─── Main Chat Agent Action ───
 
+// Legacy non-streaming chat (kept for backward compat)
 export const chat = action({
   args: {
     userId: v.string(),
@@ -1285,15 +1286,12 @@ export const chat = action({
       throw new Error("ANTHROPIC_API_KEY not configured");
     }
 
-    // Build messages array with history
     const messages: Message[] = [];
-
     for (const msg of args.conversationHistory) {
       messages.push({ role: msg.role, content: msg.content });
     }
     messages.push({ role: "user", content: args.message });
 
-    // Claude tool-use loop
     let maxIterations = 5;
     let currentMessages = [...messages];
 
@@ -1324,20 +1322,17 @@ export const chat = action({
       const data = await response.json();
       const content: ContentBlock[] = data.content;
 
-      // Check if we need to handle tool calls
       const toolUses = content.filter(
         (block): block is ToolUseBlock => block.type === "tool_use",
       );
 
       if (toolUses.length === 0 || data.stop_reason === "end_turn") {
-        // No tool calls — extract text response
         const textBlocks = content.filter(
           (block): block is TextBlock => block.type === "text",
         );
         return textBlocks.map((b) => b.text).join("\n");
       }
 
-      // Handle tool calls
       currentMessages.push({ role: "assistant", content });
 
       const toolResults: Array<{
@@ -1362,5 +1357,201 @@ export const chat = action({
     }
 
     return "I ran into an issue processing your request — too many steps. Could you try a simpler request?";
+  },
+});
+
+// ─── Streaming Chat Agent ───
+
+export const chatStreaming = action({
+  args: {
+    userId: v.string(),
+    message: v.string(),
+    conversationHistory: v.array(
+      v.object({
+        role: v.union(v.literal("user"), v.literal("assistant")),
+        content: v.string(),
+      }),
+    ),
+    messageId: v.id("chat_messages"),
+  },
+  handler: async (ctx, args): Promise<string> => {
+    if (!ANTHROPIC_API_KEY) {
+      throw new Error("ANTHROPIC_API_KEY not configured");
+    }
+
+    const messages: Message[] = [];
+    for (const msg of args.conversationHistory) {
+      messages.push({ role: msg.role, content: msg.content });
+    }
+    messages.push({ role: "user", content: args.message });
+
+    let maxIterations = 5;
+    let currentMessages = [...messages];
+    let fullResponse = "";
+
+    while (maxIterations > 0) {
+      maxIterations--;
+
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 2048,
+          system: buildSystemPrompt(),
+          tools: TOOLS,
+          messages: currentMessages,
+          stream: true,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Claude API error: ${errorText}`);
+      }
+
+      // Parse SSE stream
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+
+      let currentText = "";
+      let buffer = "";
+      let lastFlush = Date.now();
+      const FLUSH_INTERVAL = 150; // ms between DB updates
+
+      const contentBlocks: ContentBlock[] = [];
+      let currentToolUse: { id: string; name: string; inputJson: string } | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const data = line.slice(6).trim();
+          if (data === "[DONE]") continue;
+
+          let event;
+          try { event = JSON.parse(data); } catch { continue; }
+
+          switch (event.type) {
+            case "content_block_start":
+              if (event.content_block?.type === "text") {
+                // Text block starting
+              } else if (event.content_block?.type === "tool_use") {
+                currentToolUse = {
+                  id: event.content_block.id,
+                  name: event.content_block.name,
+                  inputJson: "",
+                };
+              }
+              break;
+
+            case "content_block_delta":
+              if (event.delta?.type === "text_delta" && event.delta.text) {
+                currentText += event.delta.text;
+
+                // Flush to DB periodically
+                const now = Date.now();
+                if (now - lastFlush >= FLUSH_INTERVAL) {
+                  await ctx.runMutation(api.chat.updateMessageContent, {
+                    messageId: args.messageId,
+                    content: fullResponse + currentText,
+                    isStreaming: true,
+                  });
+                  lastFlush = now;
+                }
+              } else if (event.delta?.type === "input_json_delta" && currentToolUse) {
+                currentToolUse.inputJson += event.delta.partial_json || "";
+              }
+              break;
+
+            case "content_block_stop":
+              if (currentToolUse) {
+                let parsedInput = {};
+                try { parsedInput = JSON.parse(currentToolUse.inputJson || "{}"); } catch {}
+                contentBlocks.push({
+                  type: "tool_use",
+                  id: currentToolUse.id,
+                  name: currentToolUse.name,
+                  input: parsedInput,
+                });
+                currentToolUse = null;
+              } else if (currentText) {
+                contentBlocks.push({ type: "text", text: currentText });
+              }
+              break;
+
+            case "message_stop":
+              break;
+          }
+        }
+      }
+
+      // Final text flush
+      if (currentText) {
+        fullResponse += currentText;
+        await ctx.runMutation(api.chat.updateMessageContent, {
+          messageId: args.messageId,
+          content: fullResponse,
+          isStreaming: true,
+        });
+      }
+
+      // Check for tool calls
+      const toolUses = contentBlocks.filter(
+        (block): block is ToolUseBlock => block.type === "tool_use",
+      );
+
+      if (toolUses.length === 0) {
+        // No tool calls — we're done
+        return fullResponse;
+      }
+
+      // Handle tool calls — show user we're working
+      const toolingMessage = fullResponse + (fullResponse ? "\n\n" : "") + "_Checking..._";
+      await ctx.runMutation(api.chat.updateMessageContent, {
+        messageId: args.messageId,
+        content: toolingMessage,
+        isStreaming: true,
+      });
+
+      // Execute tools
+      currentMessages.push({ role: "assistant", content: contentBlocks });
+
+      const toolResults: Array<{
+        type: "tool_result";
+        tool_use_id: string;
+        content: string;
+      }> = [];
+
+      for (const toolUse of toolUses) {
+        const result = await executeTool(ctx, toolUse.name, toolUse.input);
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: toolUse.id,
+          content: result,
+        });
+      }
+
+      currentMessages.push({
+        role: "user",
+        content: toolResults as unknown as ContentBlock[],
+      });
+
+      // Reset for next iteration — Claude will generate a new response
+      currentText = "";
+      fullResponse = "";
+    }
+
+    return fullResponse || "I ran into an issue processing your request — too many steps. Could you try a simpler request?";
   },
 });

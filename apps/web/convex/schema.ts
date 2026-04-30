@@ -220,6 +220,7 @@ export default defineSchema({
     conversationId: v.optional(v.id("chat_conversations")), // optional for backward compat
     role: v.union(v.literal("user"), v.literal("assistant")),
     content: v.string(),
+    isStreaming: v.optional(v.boolean()), // true while AI is generating
     timestamp: v.number(),
   })
     .index("by_user", ["userId"])
